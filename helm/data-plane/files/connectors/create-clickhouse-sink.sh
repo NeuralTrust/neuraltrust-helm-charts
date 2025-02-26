@@ -1,13 +1,15 @@
 #!/bin/sh
 
+NAMESPACE=${1:-neuraltrust}
+
 echo "Waiting for Kafka Connect to be ready..."
-until curl -s kafka-connect-svc.neuraltrust.svc.cluster.local:8083/connectors > /dev/null; do
+until curl -s http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors > /dev/null; do
   sleep 5
   echo "Waiting..."
 done
 
 echo "Creating ClickHouse sink connector..."
-curl -X POST kafka-connect-svc.neuraltrust.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
   "name": "clickhouse-traces-processed-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -33,7 +35,7 @@ curl -X POST kafka-connect-svc.neuraltrust.svc.cluster.local:8083/connectors -H 
   }
 }' 
 
-curl -X POST kafka-connect-svc.neuraltrust.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
   "name": "clickhouse-traces-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",

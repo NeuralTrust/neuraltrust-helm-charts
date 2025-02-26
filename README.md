@@ -1,6 +1,6 @@
 # NeuralTrust Infrastructure
 
-This directory contains the infrastructure code for NeuralTrust[https://neuraltrust.ai], a comprehensive platform for monitoring, securing, and analyzing AI interactions.
+This directory contains the infrastructure code for [NeuralTrust](https://neuraltrust.ai), a comprehensive platform for monitoring, securing, and analyzing AI interactions.
 
 ## Architecture
 
@@ -16,11 +16,11 @@ NeuralTrust consists of two main components:
    - Web application for user interaction
    - API service for business logic
    - PostgreSQL database for application data
-   - **Note**: The Control Plane is managed by NeuralTrust[https://neuraltrust.ai] and does not require installation
+   - **Note**: The Control Plane is managed by [NeuralTrust](https://neuraltrust.ai) and does not require installation
 
 ## Prerequisites
 
-Before installing NeuralTrust[https://neuraltrust.ai], ensure you have the following:
+Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the following:
 
 - Kubernetes cluster (v1.20+)
 - Helm (v3.8+)

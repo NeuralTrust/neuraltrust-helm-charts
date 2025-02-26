@@ -5,7 +5,7 @@ CREATE DATABASE IF NOT EXISTS neuraltrust;
 USE neuraltrust;
 
 -- Teams table - use ReplicatedMergeTree for better reliability
-CREATE TABLE IF NOT EXISTS teams_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS teams_local ON CLUSTER default
 (
     id String,
     name String,
@@ -24,11 +24,11 @@ CREATE TABLE IF NOT EXISTS teams_local ON CLUSTER '{cluster}'
 ORDER BY (id);
 
 -- Create a Distributed table for teams
-CREATE TABLE IF NOT EXISTS teams ON CLUSTER '{cluster}' AS teams_local
-ENGINE = Distributed('{cluster}', neuraltrust, teams_local, rand());
+CREATE TABLE IF NOT EXISTS teams ON CLUSTER default AS teams_local
+ENGINE = Distributed('default', neuraltrust, teams_local, rand());
 
 -- Apps table
-CREATE TABLE IF NOT EXISTS apps_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS apps_local ON CLUSTER default
 (
     id String,
     name String,
@@ -43,11 +43,11 @@ CREATE TABLE IF NOT EXISTS apps_local ON CLUSTER '{cluster}'
 ORDER BY (id);
 
 -- Create a Distributed table for apps
-CREATE TABLE IF NOT EXISTS apps ON CLUSTER '{cluster}' AS apps_local
-ENGINE = Distributed('{cluster}', neuraltrust, apps_local, rand());
+CREATE TABLE IF NOT EXISTS apps ON CLUSTER default AS apps_local
+ENGINE = Distributed('default', neuraltrust, apps_local, rand());
 
 -- Classifiers table
-CREATE TABLE IF NOT EXISTS classifiers_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS classifiers_local ON CLUSTER default
 (
     id UInt32,
     name String,
@@ -63,11 +63,11 @@ CREATE TABLE IF NOT EXISTS classifiers_local ON CLUSTER '{cluster}'
 ORDER BY (id);
 
 -- Create a Distributed table for classifiers
-CREATE TABLE IF NOT EXISTS classifiers ON CLUSTER '{cluster}' AS classifiers_local
-ENGINE = Distributed('{cluster}', neuraltrust, classifiers_local, rand());
+CREATE TABLE IF NOT EXISTS classifiers ON CLUSTER default AS classifiers_local
+ENGINE = Distributed('default', neuraltrust, classifiers_local, rand());
 
 -- Classes table
-CREATE TABLE IF NOT EXISTS classes_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS classes_local ON CLUSTER default
 (
     id UInt32,
     name String,
@@ -79,11 +79,11 @@ CREATE TABLE IF NOT EXISTS classes_local ON CLUSTER '{cluster}'
 ORDER BY (id);
 
 -- Create a Distributed table for classes
-CREATE TABLE IF NOT EXISTS classes ON CLUSTER '{cluster}' AS classes_local
-ENGINE = Distributed('{cluster}', neuraltrust, classes_local, rand());
+CREATE TABLE IF NOT EXISTS classes ON CLUSTER default AS classes_local
+ENGINE = Distributed('default', neuraltrust, classes_local, rand());
 
 -- Raw traces table - shard by app_id for better distribution
-CREATE TABLE IF NOT EXISTS traces_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS traces_local ON CLUSTER default
 (
     app_id String,
     team_id String,
@@ -121,11 +121,11 @@ TTL event_date + INTERVAL 6 MONTH
 SETTINGS index_granularity = 8192;
 
 -- Create a Distributed table for traces
-CREATE TABLE IF NOT EXISTS traces ON CLUSTER '{cluster}' AS traces_local
-ENGINE = Distributed('{cluster}', neuraltrust, traces_local, cityHash64(app_id));
+CREATE TABLE IF NOT EXISTS traces ON CLUSTER default AS traces_local
+ENGINE = Distributed('default', neuraltrust, traces_local, cityHash64(app_id));
 
 -- Processed traces table with KPIs - shard by APP_ID
-CREATE TABLE IF NOT EXISTS traces_processed_local ON CLUSTER '{cluster}'
+CREATE TABLE IF NOT EXISTS traces_processed_local ON CLUSTER default
 (
     -- Base fields from traces
     APP_ID String,
@@ -223,11 +223,11 @@ TTL EVENT_DATE + INTERVAL 6 MONTH
 SETTINGS index_granularity = 8192;
 
 -- Create a Distributed table for processed traces
-CREATE TABLE IF NOT EXISTS traces_processed ON CLUSTER '{cluster}' AS traces_processed_local
-ENGINE = Distributed('{cluster}', neuraltrust, traces_processed_local, cityHash64(APP_ID));
+CREATE TABLE IF NOT EXISTS traces_processed ON CLUSTER default AS traces_processed_local
+ENGINE = Distributed('default', neuraltrust, traces_processed_local, cityHash64(APP_ID));
 
 -- User and session metrics view - use ReplicatedAggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_user_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_user_metrics_local ON CLUSTER default
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_user_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
@@ -259,11 +259,11 @@ FROM (
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
 
 -- Create a Distributed view for user metrics
-CREATE TABLE IF NOT EXISTS traces_user_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_user_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_user_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_user_metrics_local, rand());
 
 -- Language metrics view
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_language_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_language_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_language_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, LANG_PROMPT)
@@ -278,11 +278,11 @@ WHERE TASK = 'message' AND LANG_PROMPT != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), LANG_PROMPT;
 
 -- Create a Distributed view for language metrics
-CREATE TABLE IF NOT EXISTS traces_language_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_language_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_language_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_language_metrics_local, rand());
 
 -- Metrics view with SummingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
@@ -294,8 +294,8 @@ AS SELECT
     -- Message metrics
     count() as messages_count,
     uniqCombined(CONVERSATION_ID) as conversations_count,
-    avg(arrayLength(splitByChar(' ', INPUT))) as avg_prompt_words,
-    avg(arrayLength(splitByChar(' ', OUTPUT))) as avg_response_words,
+    avg(length(splitByChar(' ', INPUT))) as avg_prompt_words,
+    avg(length(splitByChar(' ', OUTPUT))) as avg_response_words,
     
     -- Token metrics
     sum(TOKENS_SPENT_PROMPT) as prompt_tokens,
@@ -347,11 +347,11 @@ FROM (
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
 
 -- Create a Distributed view for metrics
-CREATE TABLE IF NOT EXISTS traces_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_metrics_local, rand());
 
 -- Create summary views for total metrics
-CREATE VIEW traces_metrics_total ON CLUSTER '{cluster}' AS
+CREATE VIEW traces_metrics_total ON CLUSTER default AS
 SELECT
     APP_ID,
     -- Message metrics
@@ -383,7 +383,7 @@ FROM traces_metrics
 GROUP BY APP_ID;
 
 -- Separate language metrics view
-CREATE VIEW traces_language_daily ON CLUSTER '{cluster}' AS
+CREATE VIEW traces_language_daily ON CLUSTER default AS
 SELECT
     APP_ID,
     EVENT_DATE,
@@ -395,7 +395,7 @@ GROUP BY APP_ID, EVENT_DATE, day, LANG_PROMPT
 ORDER BY APP_ID, EVENT_DATE, day, count DESC;
 
 -- Total language metrics view
-CREATE VIEW traces_language_total ON CLUSTER '{cluster}' AS
+CREATE VIEW traces_language_total ON CLUSTER default AS
 SELECT
     APP_ID,
     LANG_PROMPT as language,
@@ -405,7 +405,7 @@ GROUP BY APP_ID, LANG_PROMPT
 ORDER BY APP_ID, count DESC;
 
 -- Device metrics view
-CREATE MATERIALIZED VIEW traces_device_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW traces_device_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_device_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, DEVICE)
@@ -420,11 +420,11 @@ WHERE TASK = 'message' AND DEVICE != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), DEVICE;
 
 -- Create a Distributed view for device metrics
-CREATE TABLE IF NOT EXISTS traces_device_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_device_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_device_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_device_metrics_local, rand());
 
 -- Browser metrics view
-CREATE MATERIALIZED VIEW traces_browser_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW traces_browser_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_browser_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, BROWSER)
@@ -439,11 +439,11 @@ WHERE TASK = 'message' AND BROWSER != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), BROWSER;
 
 -- Create a Distributed view for browser metrics
-CREATE TABLE IF NOT EXISTS traces_browser_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_browser_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_browser_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_browser_metrics_local, rand());
 
 -- OS metrics view
-CREATE MATERIALIZED VIEW traces_os_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW traces_os_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_os_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, OS)
@@ -458,11 +458,11 @@ WHERE TASK = 'message' AND OS != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), OS;
 
 -- Create a Distributed view for OS metrics
-CREATE TABLE IF NOT EXISTS traces_os_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_os_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_os_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_os_metrics_local, rand());
 
 -- Create a materialized view for sessions by channel
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_channel_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_channel_metrics_local ON CLUSTER default
 ENGINE = ReplicatedSummingMergeTree('/clickhouse/tables/{shard}/traces_channel_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, channel)
@@ -478,11 +478,11 @@ WHERE TASK = 'message' AND CHANNEL_ID IS NOT NULL
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), CHANNEL_ID;
 
 -- Create a Distributed view for channel metrics
-CREATE TABLE IF NOT EXISTS traces_channel_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_channel_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_channel_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_channel_metrics_local, rand());
 
 -- User engagement metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_engagement_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_engagement_metrics_local ON CLUSTER default
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_engagement_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
@@ -511,11 +511,11 @@ FROM (
 GROUP BY APP_ID, EVENT_DATE, day;
 
 -- Create a Distributed view for engagement metrics
-CREATE TABLE IF NOT EXISTS traces_engagement_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_engagement_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_engagement_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_engagement_metrics_local, rand());
 
 -- Top users by requests view with AggregatingMergeTree engine
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_top_users_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_top_users_local ON CLUSTER default
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_top_users', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, USER_ID)
@@ -531,11 +531,11 @@ WHERE TASK = 'message' AND USER_ID != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
 -- Create a Distributed view for top users
-CREATE TABLE IF NOT EXISTS traces_top_users ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_top_users_local, rand());
+CREATE TABLE IF NOT EXISTS traces_top_users ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_top_users_local, rand());
 
 -- Security metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics_local ON CLUSTER '{cluster}'
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics_local ON CLUSTER default
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_security_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
@@ -588,5 +588,5 @@ WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
 
 -- Create a Distributed view for security metrics
-CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER '{cluster}'
-ENGINE = Distributed('{cluster}', neuraltrust, traces_security_metrics_local, rand());
+CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_security_metrics_local, rand());

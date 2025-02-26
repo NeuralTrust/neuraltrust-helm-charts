@@ -201,7 +201,7 @@ spec:
           - |
             echo "Creating ClickHouse sink connector..."
             ls -la /scripts
-            /scripts/create-clickhouse-sink.sh
+            /scripts/create-clickhouse-sink.sh {{ .Release.Namespace }}
         env:
         - name: CLICKHOUSE_HOST
           valueFrom:

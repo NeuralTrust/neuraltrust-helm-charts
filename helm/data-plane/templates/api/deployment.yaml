@@ -27,6 +27,11 @@ spec:
         env:
           - name: PORT
             value: "8000"
+          - name: DATA_PLANE_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: data-plane-jwt-secret
+                key: JWT_SECRET
           - name: KAFKA_BOOTSTRAP_SERVERS
             value: "kafka:9092"
           - name: HF_HOME

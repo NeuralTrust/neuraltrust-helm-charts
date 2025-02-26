@@ -130,6 +130,12 @@ generate_jwt_secret() {
 create_data_plane_secrets() {
     log_info "Creating data plane secrets..."
     
+    # Create JWT secret
+    kubectl create secret generic data-plane-jwt-secret \
+        --namespace "$NAMESPACE" \
+        --from-literal=JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
     # Create OpenAI API key secret
     kubectl create secret generic openai-secrets \
         --namespace "$NAMESPACE" \
@@ -326,7 +332,6 @@ EOF
         --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
         --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
-        --set dataPlane.components.api.jwtSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
         --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
