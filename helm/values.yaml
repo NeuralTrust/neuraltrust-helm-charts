@@ -1,0 +1,133 @@
+global:
+  postgresql:
+    enabled: false
+  accessMode: ReadWriteOnce
+  classifierModel: "gpt"
+  issuer:
+    name: "letsencrypt-prod"
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+  # Network policies
+  network:
+    controlPlaneCidr: "10.0.0.0/16"
+    dataPlanecidr: "10.1.0.0/16"
+    clientDataPlaneCidr: ""
+    clientVpnCidr: ""
+    excludedClientRanges: []
+
+cert-manager:
+  enabled: true
+  email: victor.garcia@neuraltrust.ai
+  issuer:
+    dns01:
+      enabled: false
+    name: "letsencrypt-prod"
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+
+controlPlane:
+  enabled: true
+  components:
+    trigger:
+      enabled: true
+      magicLinkSecret: "${TRIGGER_MAGIC_LINK_SECRET}"
+      sessionSecret: "${TRIGGER_SESSION_SECRET}"
+      encryptionKey: "${TRIGGER_ENCRYPTION_KEY}"
+      postgres:
+        url: "${POSTGRES_URL}"
+        user: "${POSTGRES_USER}"
+        password: "${POSTGRES_PASSWORD}"
+        host: "${POSTGRES_HOST}"
+        database: "triggerprod"
+    api:
+      enabled: true
+      image:
+        repository: "${API_IMAGE_REPOSITORY}"
+        tag: "${API_IMAGE_TAG}"
+        pullPolicy: "${API_IMAGE_PULL_POLICY}"
+      host: "${API_URL}"
+      secrets:
+        jwtSecret: "${CONTROL_PLANE_JWT_SECRET}"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+    app:
+      enabled: true
+      replicaCount: 1
+      image:
+        repository: "${WEBAPP_IMAGE_REPOSITORY}"
+        tag: "${WEBAPP_IMAGE_TAG}"
+        pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
+      host: "${APP_URL}"
+      config:
+        nodeEnv: production
+        port: 3000
+        apiUrl: "${API_URL}"
+        appUrl: "${APP_URL}"        
+        openaiModel: "${OPENAI_MODEL}"
+        nodeTlsRejectUnauthorized: "0"
+      secrets:
+        auth:
+          secret: "${AUTH_SECRET}"
+        app:
+          secretKey: "${APP_SECRET_KEY}"
+        oauth:
+          clientKey: "${OAUTH_CLIENT_KEY}"
+          clientSecret: "${OAUTH_CLIENT_SECRET}"
+        sendgrid:
+          apiKey: "${SENDGRID_API_KEY}"
+          sender: "${SENDER}"
+        trigger:
+          apiKey: "${TRIGGER_API_KEY}"
+          publicApiKey: "${TRIGGER_PUBLIC_API_KEY}"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+dataPlane:
+  enabled: true
+  components:
+    api:
+      enabled: true
+      image:
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/api
+        tag: latest
+        pullPolicy: Always
+      host: "${API_URL}"
+      accessMode: ReadWriteOnce
+      huggingfaceToken: "${HUGGINGFACE_TOKEN}"
+      storage: 10Gi
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 400m
+          memory: 1Gi
+    kafka:
+      enabled: true
+      schemaRegistry:
+        replicas: 1
+      connect:
+        replicas: 1
+      broker:
+        replicas: 1
+    worker:
+      enabled: true
+      replicas: 1
+      image:
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers
+        tag: latest
+        pullPolicy: Always
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 500m
+        limits:
+          memory: 2Gi
+          cpu: 1000m

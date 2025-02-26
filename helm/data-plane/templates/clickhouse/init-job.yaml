@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+spec:
+  template:
+    spec:
+      containers:
+      - name: clickhouse-init
+        image: clickhouse/clickhouse-client:latest
+        command: ["clickhouse-client"]
+        args: 
+        - "--host=$(CLICKHOUSE_HOST)"
+        - "--port=9000"
+        - "--user=$(CLICKHOUSE_USER)"
+        - "--password=$(CLICKHOUSE_PASSWORD)"
+        - "--multiquery"
+        - "--queries-file=/init/init-db.sql"
+        env:
+        - name: CLICKHOUSE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_HOST
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse
+              key: admin-password
+        volumeMounts:
+        - name: init-scripts
+          mountPath: /init
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: clickhouse-init-scripts
+      restartPolicy: OnFailure 

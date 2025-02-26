@@ -1,0 +1,42 @@
+---
+include:
+  - docker-compose.infra.yaml
+
+services:
+  worker:
+    container_name: worker
+    build:
+      context: ../../kafka-workers
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - KAFKA_BOOTSTRAP_SERVERS=broker:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=default
+      - CLICKHOUSE_DATABASE=neuraltrust
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        # echo -e "\n\n⏳ Download models\n"
+        # python -m spacy download en_core_web_sm
+        python -u src/listen.py
+    volumes:
+      - ../../kafka-workers:/code
+      - ./scripts:/scripts
+    depends_on:
+      - clickhouse
+      - broker
+      - schema-registry
+
+volumes:
+  certbot-etc:
+  certbot-var:
+
+networks:
+  app-network:
+    driver: bridge 

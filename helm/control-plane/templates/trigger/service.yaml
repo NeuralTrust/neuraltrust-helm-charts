@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Release.Name }}-trigger"
+spec:
+  selector:
+    app: trigger
+  ports:
+    - protocol: TCP
+      port: 3030
+      targetPort: 3030
