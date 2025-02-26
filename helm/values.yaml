@@ -23,6 +23,13 @@ cert-manager:
     name: "letsencrypt-prod"
     server: "https://acme-v02.api.letsencrypt.org/directory"
 
+clickhouse:
+  enabled: true
+  image:
+    repository: "clickhouse/clickhouse-server"
+    tag: "latest"
+    pullPolicy: "Always"
+
 controlPlane:
   enabled: true
   components:

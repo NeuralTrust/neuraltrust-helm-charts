@@ -16,7 +16,8 @@ NeuralTrust consists of two main components:
    - Web application for user interaction
    - API service for business logic
    - PostgreSQL database for application data
-   - **Note**: The Control Plane is managed by [NeuralTrust](https://neuraltrust.ai) and does not require installation
+
+> **Important**: The Control Plane is managed by [NeuralTrust](https://neuraltrust.ai) and does not require installation.
 
 ## Prerequisites
 
