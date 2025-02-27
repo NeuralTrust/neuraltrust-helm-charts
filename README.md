@@ -122,9 +122,9 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
 
    You can use the provided `.env.example` file as a template:
    ```bash
-   cp infra/.env.example infra/.env.dev
+   cp .env.example .env.dev
    # Edit the file with your values
-   nano infra/.env.dev
+   nano .env.dev
    ```
 
 ### Environment Variables
@@ -170,7 +170,7 @@ export ENVIRONMENT=dev
 # export ENVIRONMENT=prod
 
 # Run the installation script
-./infra/install-data-plane.sh
+./install-data-plane.sh
 ```
 
 During installation, you will be prompted for:
@@ -203,7 +203,7 @@ To properly configure the Data Plane API endpoint, you'll need to set up DNS rec
    
    To find your ingress controller address after installation:
    ```bash
-   kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   kubectl get svc -n {{ namespace }} ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
    ```
 
 3. **Alternative A record** - If CNAME is not possible, you can use an A record pointing to the IP address of your ingress controller:
