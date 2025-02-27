@@ -19,11 +19,80 @@ NeuralTrust consists of two main components:
 
 > **Important**: The Control Plane is managed by [NeuralTrust](https://neuraltrust.ai) and does not require installation.
 
+## Connectivity
+
+### Network Requirements
+
+The NeuralTrust architecture has specific connectivity requirements:
+
+1. **Data Plane API** - This is the only component that requires public internet exposure for two reasons:
+   - To receive telemetry data from client applications using the NeuralTrust SDK
+   - To allow the Control Plane to connect and manage the Data Plane
+
+2. **Internal Components** - The following components should only be accessible within the Kubernetes cluster:
+   - Kafka
+   - ClickHouse
+   - Worker service
+   - Schema Registry
+
+### Network Diagram
+
+```
+Internet
+   │
+   ▼
+┌─────────────────────────────────────────────┐
+│                                             │
+│  Kubernetes Cluster                         │
+│                                             │
+│  ┌─────────────┐        ┌───────────────┐   │
+│  │             │        │               │   │
+│  │ Ingress     │───────▶│ Data Plane    │   │
+│  │ Controller  │        │ API           │   │
+│  │             │        │               │   │
+│  └─────────────┘        └───────┬───────┘   │
+│                                 │           │
+│                                 ▼           │
+│  ┌─────────────┐        ┌───────────────┐   │
+│  │             │        │               │   │
+│  │ Worker      │◀───────│ Kafka         │   │
+│  │ Service     │        │               │   │
+│  │             │        └───────────────┘   │
+│  └──────┬──────┘                            │
+│         │                                   │
+│         ▼                                   │
+│  ┌─────────────┐                            │
+│  │             │                            │
+│  │ ClickHouse  │                            │
+│  │ Database    │                            │
+│  │             │                            │
+│  └─────────────┘                            │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+### Firewall Configuration
+
+Ensure your network allows:
+
+1. Inbound HTTPS traffic (port 443) to the Kubernetes ingress controller
+2. Outbound HTTPS traffic (port 443) from the Data Plane API to the Control Plane
+3. Outbound HTTPS traffic (port 443) from the Worker service to external AI services (OpenAI, HuggingFace)
+
+> **Important**: NeuralTrust can provide a specific IP range for the Control Plane to help you implement more restrictive firewall rules. However, you must ensure that:
+> 1. Your client LLM applications can always reach the Data Plane API to send telemetry data
+> 2. The Control Plane can connect to your Data Plane API for management purposes
+
+> **Note**: All other communication happens within the Kubernetes cluster and doesn't require external network access.
+
 ## Prerequisites
 
 Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the following:
 
 - Kubernetes cluster (v1.20+)
+  - Minimum of 3 nodes
+  - Each node: 4 vCPUs, 16 GB Memory
+  - Total cluster resources: 12+ vCPUs, 48+ GB Memory
 - Helm (v3.8+)
 - kubectl configured to access your cluster
 - OpenAI API key
