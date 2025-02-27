@@ -85,39 +85,6 @@ Ensure your network allows:
 
 > **Note**: All other communication happens within the Kubernetes cluster and doesn't require external network access.
 
-## Domain Configuration
-
-### DNS Setup
-
-To properly configure the Data Plane API endpoint, you'll need to set up DNS records:
-
-1. **Create a subdomain** - Create a dedicated subdomain for your Data Plane API (e.g., `dataplane.yourdomain.com`)
-
-2. **Configure CNAME record** - Set up a CNAME record pointing to your Kubernetes ingress controller's external IP or load balancer:
-   ```
-   dataplane.yourdomain.com.  IN  CNAME  <your-ingress-controller-address>
-   ```
-   
-   To find your ingress controller address after installation:
-   ```bash
-   kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-   ```
-
-3. **Alternative A record** - If CNAME is not possible, you can use an A record pointing to the IP address of your ingress controller:
-   ```
-   dataplane.yourdomain.com.  IN  A  <your-ingress-controller-ip>
-   ```
-
-### TLS/SSL Certificates
-
-The installation process automatically configures Let's Encrypt certificates for your domain. Ensure that:
-
-1. The domain is publicly accessible
-2. DNS propagation is complete before installation
-3. The email address provided in the `EMAIL` environment variable is valid (for Let's Encrypt notifications)
-
-> **Note**: If you need to use your own certificates instead of Let's Encrypt, please contact NeuralTrust support for guidance on configuring custom certificates.
-
 ## Prerequisites
 
 Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the following:
@@ -155,9 +122,9 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
 
    You can use the provided `.env.example` file as a template:
    ```bash
-   cp infra/.env.example infra/.env.dev
+   cp .env.example .env.dev
    # Edit the file with your values
-   nano infra/.env.dev
+   nano .env.dev
    ```
 
 ### Environment Variables
@@ -203,7 +170,7 @@ export ENVIRONMENT=dev
 # export ENVIRONMENT=prod
 
 # Run the installation script
-./infra/install-data-plane.sh
+./install-data-plane.sh
 ```
 
 During installation, you will be prompted for:
@@ -220,6 +187,39 @@ The script will:
 5. Install ClickHouse database (with 2 shards and 2 replicas)
 6. Install Kafka for messaging
 7. Deploy the Data Plane components
+
+## Domain Configuration
+
+### DNS Setup
+
+To properly configure the Data Plane API endpoint, you'll need to set up DNS records:
+
+1. **Create a subdomain** - Create a dedicated subdomain for your Data Plane API (e.g., `dataplane.yourdomain.com`)
+
+2. **Configure CNAME record** - Set up a CNAME record pointing to your Kubernetes ingress controller's external IP or load balancer:
+   ```
+   dataplane.yourdomain.com.  IN  CNAME  <your-ingress-controller-address>
+   ```
+   
+   To find your ingress controller address after installation:
+   ```bash
+   kubectl get svc -n {{ namespace }} ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   ```
+
+3. **Alternative A record** - If CNAME is not possible, you can use an A record pointing to the IP address of your ingress controller:
+   ```
+   dataplane.yourdomain.com.  IN  A  <your-ingress-controller-ip>
+   ```
+
+### TLS/SSL Certificates
+
+The installation process automatically configures Let's Encrypt certificates for your domain. Ensure that:
+
+1. The domain is publicly accessible
+2. DNS propagation is complete before installation
+3. The email address provided in the `EMAIL` environment variable is valid (for Let's Encrypt notifications)
+
+> **Note**: If you need to use your own certificates instead of Let's Encrypt, please contact NeuralTrust support for guidance on configuring custom certificates.
 
 ### Connecting to the Control Plane
 
