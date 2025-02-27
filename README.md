@@ -85,6 +85,39 @@ Ensure your network allows:
 
 > **Note**: All other communication happens within the Kubernetes cluster and doesn't require external network access.
 
+## Domain Configuration
+
+### DNS Setup
+
+To properly configure the Data Plane API endpoint, you'll need to set up DNS records:
+
+1. **Create a subdomain** - Create a dedicated subdomain for your Data Plane API (e.g., `dataplane.yourdomain.com`)
+
+2. **Configure CNAME record** - Set up a CNAME record pointing to your Kubernetes ingress controller's external IP or load balancer:
+   ```
+   dataplane.yourdomain.com.  IN  CNAME  <your-ingress-controller-address>
+   ```
+   
+   To find your ingress controller address after installation:
+   ```bash
+   kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   ```
+
+3. **Alternative A record** - If CNAME is not possible, you can use an A record pointing to the IP address of your ingress controller:
+   ```
+   dataplane.yourdomain.com.  IN  A  <your-ingress-controller-ip>
+   ```
+
+### TLS/SSL Certificates
+
+The installation process automatically configures Let's Encrypt certificates for your domain. Ensure that:
+
+1. The domain is publicly accessible
+2. DNS propagation is complete before installation
+3. The email address provided in the `EMAIL` environment variable is valid (for Let's Encrypt notifications)
+
+> **Note**: If you need to use your own certificates instead of Let's Encrypt, please contact NeuralTrust support for guidance on configuring custom certificates.
+
 ## Prerequisites
 
 Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the following:
