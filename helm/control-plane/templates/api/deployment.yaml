@@ -52,8 +52,8 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
-        - name: JWT_SECRET_KEY
+        - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: {{ .Release.Name }}-api
-              key: jwt-secret
+              name: control-plane-jwt-secret
+              key: CONTROL_PLANE_JWT_SECRET
