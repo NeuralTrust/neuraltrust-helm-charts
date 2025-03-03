@@ -50,9 +50,9 @@ controlPlane:
         repository: "${API_IMAGE_REPOSITORY}"
         tag: "${API_IMAGE_TAG}"
         pullPolicy: "${API_IMAGE_PULL_POLICY}"
-      host: "${API_URL}"
+      host: "${CONTROL_PLANE_API_URL}"
       secrets:
-        jwtSecret: "${CONTROL_PLANE_JWT_SECRET}"
+        controlPlaneJWTSecret: "${CONTROL_PLANE_JWT_SECRET}"
       resources:
         requests:
           memory: 512Mi
@@ -71,8 +71,9 @@ controlPlane:
       config:
         nodeEnv: production
         port: 3000
-        apiUrl: "${API_URL}"
-        appUrl: "${APP_URL}"        
+        controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
+        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
+        controlPlaneAppUrl: "${CONTROL_PLANE_APP_URL}"        
         openaiModel: "${OPENAI_MODEL}"
         nodeTlsRejectUnauthorized: "0"
       secrets:
@@ -105,7 +106,7 @@ dataPlane:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/api
         tag: latest
         pullPolicy: Always
-      host: "${API_URL}"
+      host: "${CONTROL_PLANE_API_URL}"
       accessMode: ReadWriteOnce
       huggingfaceToken: "${HUGGINGFACE_TOKEN}"
       storage: 10Gi

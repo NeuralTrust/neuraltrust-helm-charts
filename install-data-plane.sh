@@ -133,7 +133,7 @@ create_data_plane_secrets() {
     # Create JWT secret
     kubectl create secret generic data-plane-jwt-secret \
         --namespace "$NAMESPACE" \
-        --from-literal=JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
+        --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Create OpenAI API key secret
@@ -298,12 +298,6 @@ EOF
         --namespace "$NAMESPACE" \
         --set controller.replicaCount=2 \
         --set controller.service.type=LoadBalancer \
-        --set controller.config.proxy-body-size="50m" \
-        --set controller.config.proxy-connect-timeout="600" \
-        --set controller.config.proxy-read-timeout="600" \
-        --set controller.config.proxy-send-timeout="600" \
-        --set controller.config.ssl-protocols="TLSv1.2 TLSv1.3" \
-        --set controller.metrics.enabled=true \
         --wait
 
     # Wait for ingress controller to be ready
@@ -332,6 +326,7 @@ EOF
         --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
         --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
+        --set dataPlane.components.api.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
         --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \

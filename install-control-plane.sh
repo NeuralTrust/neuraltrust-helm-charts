@@ -85,6 +85,18 @@ create_namespace_if_not_exists() {
 create_control_plane_secrets() {
     log_info "Creating control plane secrets..."
     
+    kubectl create secret generic control-plane-jwt-secret \
+        --namespace "$NAMESPACE" \
+        --from-literal=CONTROL_PLANE_JWT_SECRET="$CONTROL_PLANE_JWT_SECRET" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    kubectl create secret generic trigger-secrets \
+        --namespace "$NAMESPACE" \
+        --from-literal=MAGIC_LINK_SECRET="$TRIGGER_MAGIC_LINK_SECRET" \
+        --from-literal=SESSION_SECRET="$TRIGGER_SESSION_SECRET" \
+        --from-literal=ENCRYPTION_KEY="$TRIGGER_ENCRYPTION_KEY" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
     # Create the secret for applications to use
     kubectl create secret generic postgresql-secrets \
         --namespace "$NAMESPACE" \
@@ -150,6 +162,50 @@ create_control_plane_secrets() {
     log_info "GCR secret created successfully"
 }
 
+# Function to check if cert-manager is installed in any namespace
+check_cert_manager_installed() {
+    # Check in common namespaces where cert-manager might be installed
+    if kubectl get deployment -n cert-manager cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in cert-manager namespace"
+        return 0
+    elif kubectl get deployment -n kube-system cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in kube-system namespace"
+        return 0
+    elif kubectl get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in $NAMESPACE namespace"
+        return 0
+    else
+        # Check across all namespaces as a last resort
+        if kubectl get deployment --all-namespaces | grep cert-manager-webhook &> /dev/null; then
+            log_info "cert-manager found in another namespace"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Function to check if NGINX Ingress Controller is installed in any namespace
+check_nginx_ingress_installed() {
+    # Check in common namespaces where NGINX Ingress might be installed
+    if kubectl get deployment -n ingress-nginx ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in ingress-nginx namespace"
+        return 0
+    elif kubectl get deployment -n kube-system ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in kube-system namespace"
+        return 0
+    elif kubectl get deployment -n "$NAMESPACE" ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in $NAMESPACE namespace"
+        return 0
+    else
+        # Check across all namespaces as a last resort
+        if kubectl get deployment --all-namespaces | grep ingress-nginx-controller &> /dev/null; then
+            log_info "NGINX Ingress Controller found in another namespace"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 install_control_plane() {
     log_info "Installing NeuralTrust Control Plane infrastructure..."
 
@@ -164,8 +220,8 @@ install_control_plane() {
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
     helm repo update
 
-    # Check if cert-manager is already installed
-    if ! kubectl get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
+    # Replace the existing cert-manager installation check with this
+    if ! check_cert_manager_installed; then
         log_info "Installing cert-manager..."
         helm upgrade --install cert-manager jetstack/cert-manager \
             --namespace "$NAMESPACE" \
@@ -200,8 +256,8 @@ EOF
         log_info "cert-manager already installed, skipping..."
     fi
 
-    # Check if NGINX Ingress Controller is already installed
-    if ! kubectl get deployment -n "$NAMESPACE" ingress-nginx-controller &> /dev/null; then
+    # Replace the existing NGINX Ingress Controller installation check with this
+    if ! check_nginx_ingress_installed; then
         log_info "Installing NGINX Ingress Controller..."
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
             --namespace "$NAMESPACE" \
@@ -238,12 +294,12 @@ EOF
         --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \
         --set controlPlane.components.api.image.pullPolicy="$CONTROL_PLANE_API_IMAGE_PULL_POLICY" \
         --set controlPlane.components.app.host="$CONTROL_PLANE_APP_URL" \
-        --set controlPlane.components.app.secrets.jwtSecret="$CONTROL_PLANE_JWT_SECRET" \
         --set controlPlane.components.app.image.repository="$CONTROL_PLANE_APP_IMAGE_REPOSITORY" \
         --set controlPlane.components.app.image.tag="$CONTROL_PLANE_APP_IMAGE_TAG" \
         --set controlPlane.components.app.image.pullPolicy="$CONTROL_PLANE_APP_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.app.config.apiUrl="$CONTROL_PLANE_API_URL" \
-        --set controlPlane.components.app.config.appUrl="$CONTROL_PLANE_APP_URL" \
+        --set controlPlane.components.app.config.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
+        --set controlPlane.components.app.config.controlPlaneAppUrl="$CONTROL_PLANE_APP_URL" \
+        --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.app.config.openaiModel="$OPENAI_MODEL" \
         --set controlPlane.components.app.secrets.auth.secret="$CONTROL_PLANE_AUTH_SECRET" \
         --set controlPlane.components.app.secrets.app.secretKey="$APP_SECRET_KEY" \
