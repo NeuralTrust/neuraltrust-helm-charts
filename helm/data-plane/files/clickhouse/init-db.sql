@@ -590,3 +590,44 @@ GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
 -- Create a Distributed view for security metrics
 CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER default
 ENGINE = Distributed('default', neuraltrust, traces_security_metrics_local, rand());
+
+-- Tests table
+CREATE TABLE IF NOT EXISTS tests_local ON CLUSTER default (
+    id String,
+    scenarioId String,
+    appId String,
+    testCase String, -- JSON in ClickHouse is stored as String
+    context String,  -- JSON in ClickHouse is stored as String
+    type String,
+    contextKeys Array(String),
+    createdAt DateTime DEFAULT now(),
+    updatedAt DateTime DEFAULT now(),
+    PRIMARY KEY (id)
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/tests', '{replica}')
+ORDER BY (id);
+
+-- Create a Distributed table for tests
+CREATE TABLE IF NOT EXISTS tests ON CLUSTER default AS tests_local
+ENGINE = Distributed('default', neuraltrust, tests_local, rand());
+
+-- Tests Runs table
+CREATE TABLE IF NOT EXISTS test_runs_local ON CLUSTER default (
+    id String,
+    scenarioId String,
+    appId String,
+    testId String,
+    type String,
+    contextKeys Array(String),
+    failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
+    failCriteria String,
+    testCase String, -- JSON stored as String
+    score String,    -- JSON stored as String
+    executionTimeSeconds Int32 NULL,
+    runAt DateTime DEFAULT now(),
+    PRIMARY KEY (id)
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/test_runs', '{replica}')
+ORDER BY (id);
+
+-- Create a Distributed table for tests
+CREATE TABLE IF NOT EXISTS test_runs ON CLUSTER default AS test_runs_local
+ENGINE = Distributed('default', neuraltrust, test_runs_local, rand());
