@@ -592,7 +592,7 @@ CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER default
 ENGINE = Distributed('default', neuraltrust, traces_security_metrics_local, rand());
 
 -- Tests table
-CREATE TABLE IF NOT EXISTS tests ON CLUSTER default (
+CREATE TABLE IF NOT EXISTS tests_local ON CLUSTER default (
     id String,
     scenarioId String,
     appId String,
@@ -602,10 +602,13 @@ CREATE TABLE IF NOT EXISTS tests ON CLUSTER default (
     contextKeys Array(String),
     createdAt DateTime DEFAULT now(),
     updatedAt DateTime DEFAULT now(),
-  	sign Int8,
-    PRIMARY KEY (id)
-) ENGINE = CollapsingMergeTree(sign) -- Need to update testCase
+  	sign Int8
+) ENGINE = ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/tests', '{replica}', sign)
 ORDER BY (id, scenarioId, appId);
+
+
+CREATE TABLE IF NOT EXISTS tests ON CLUSTER default AS tests_local
+ENGINE = Distributed('default', neuraltrust, tests_local, rand());
 
 -- Tests Runs table
 CREATE TABLE IF NOT EXISTS test_runs_local ON CLUSTER default (
