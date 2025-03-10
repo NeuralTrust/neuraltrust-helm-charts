@@ -624,9 +624,9 @@ CREATE TABLE IF NOT EXISTS test_runs_local ON CLUSTER default (
     score String,    -- JSON stored as String
     executionTimeSeconds Int32 NULL,
     runAt DateTime DEFAULT now(),
-    PRIMARY KEY (id)
-) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/test_runs', '{replica}')
-ORDER BY (id);
+    sign Int8
+) ENGINE = ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/test_runs', '{replica}', sign)
+ORDER BY (id, scenarioId, appId);
 
 -- Create a Distributed table for tests
 CREATE TABLE IF NOT EXISTS test_runs ON CLUSTER default AS test_runs_local
