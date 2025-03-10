@@ -227,7 +227,15 @@ AS SELECT
     -- Token metrics
     sumState(TOKENS_SPENT_PROMPT) as prompt_tokens_state,
     sumState(TOKENS_SPENT_RESPONSE) as response_tokens_state,
-    avgState(LATENCY) as avg_latency_state
+    avgState(LATENCY) as avg_latency_state,
+    -- Sentiment metrics
+    sumState(SENTIMENT_PROMPT_POSITIVE) as sentiment_prompt_positive_state,
+    sumState(SENTIMENT_PROMPT_NEGATIVE) as sentiment_prompt_negative_state,
+    sumState(SENTIMENT_PROMPT_NEUTRAL) as sentiment_prompt_neutral_state,
+    sumState(SENTIMENT_RESPONSE_POSITIVE) as sentiment_response_positive_state,
+    sumState(SENTIMENT_RESPONSE_NEGATIVE) as sentiment_response_negative_state,
+    sumState(SENTIMENT_RESPONSE_NEUTRAL) as sentiment_response_neutral_state,
+    
 FROM (
     SELECT 
         APP_ID,
@@ -240,6 +248,12 @@ FROM (
         TOKENS_SPENT_PROMPT,
         TOKENS_SPENT_RESPONSE,
         LATENCY,
+        SENTIMENT_PROMPT_POSITIVE,
+        SENTIMENT_PROMPT_NEGATIVE,
+        SENTIMENT_PROMPT_NEUTRAL,
+        SENTIMENT_RESPONSE_POSITIVE,
+        SENTIMENT_RESPONSE_NEGATIVE,
+        SENTIMENT_RESPONSE_NEUTRAL,
         EVENT_DATE,
         -- Count messages per conversation
         count() OVER (PARTITION BY APP_ID, CONVERSATION_ID) as conv_message_count
@@ -538,8 +552,8 @@ WHERE TASK = 'message' AND USER_ID != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
 -- Security metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics
-ENGINE = AggregatingMergeTree()
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics_local ON CLUSTER default
+ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_security_metrics', '{replica}')
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
 AS SELECT
@@ -589,3 +603,265 @@ AS SELECT
 FROM traces_processed
 WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
+
+-- Create a Distributed table for security metrics
+CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_security_metrics_local, cityHash64(APP_ID));
+
+-- Create a materialized view with its own storage engine for conversation aggregation
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_conversations_local ON CLUSTER default
+ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_conversations', '{replica}')
+PARTITION BY toYYYYMM(EVENT_DATE)
+ORDER BY (APP_ID, CONVERSATION_ID)
+AS SELECT
+    APP_ID,
+    CONVERSATION_ID,
+    toDate(START_TIMESTAMP / 1000) as EVENT_DATE,
+    min(START_TIMESTAMP) as FIRST_MESSAGE_TIMESTAMP,
+    max(END_TIMESTAMP) as LAST_MESSAGE_TIMESTAMP,
+    argMaxState(USER_ID, START_TIMESTAMP) as USER_ID_STATE,
+    argMaxState(SESSION_ID, START_TIMESTAMP) as SESSION_ID_STATE,
+    argMaxState(DEVICE, START_TIMESTAMP) as DEVICE_STATE,
+    argMaxState(OS, START_TIMESTAMP) as OS_STATE,
+    argMaxState(BROWSER, START_TIMESTAMP) as BROWSER_STATE,
+    argMaxState(LOCALE, START_TIMESTAMP) as LOCALE_STATE,
+    argMaxState(LOCATION, START_TIMESTAMP) as LOCATION_STATE,
+    argMaxState(CHANNEL_ID, START_TIMESTAMP) as CHANNEL_ID_STATE,
+    
+    -- Conversation metrics
+    countState() as DIALOGUE_VOLUME_STATE,
+    
+    -- Time metrics
+    minState(START_TIMESTAMP) as MIN_START_TIMESTAMP_STATE,
+    maxState(END_TIMESTAMP) as MAX_END_TIMESTAMP_STATE,
+    
+    -- Content metrics
+    sumState(NUM_WORDS_PROMPT) as NUM_WORDS_PROMPT_TOTAL_STATE,
+    avgState(NUM_WORDS_PROMPT) as NUM_WORDS_PROMPT_AVG_STATE,
+    minState(NUM_WORDS_PROMPT) as NUM_WORDS_PROMPT_MIN_STATE,
+    maxState(NUM_WORDS_PROMPT) as NUM_WORDS_PROMPT_MAX_STATE,
+    
+    sumState(NUM_WORDS_RESPONSE) as NUM_WORDS_RESPONSE_TOTAL_STATE,
+    avgState(NUM_WORDS_RESPONSE) as NUM_WORDS_RESPONSE_AVG_STATE,
+    minState(NUM_WORDS_RESPONSE) as NUM_WORDS_RESPONSE_MIN_STATE,
+    maxState(NUM_WORDS_RESPONSE) as NUM_WORDS_RESPONSE_MAX_STATE,
+    
+    -- Latency metrics
+    sumState(LATENCY) as TIME_LATENCY_SUM_STATE,
+    avgState(LATENCY) as TIME_LATENCY_AVG_STATE,
+    minState(LATENCY) as TIME_LATENCY_MIN_STATE,
+    maxState(LATENCY) as TIME_LATENCY_MAX_STATE,
+    
+    -- Token metrics
+    sumState(TOKENS_SPENT_PROMPT) as TOKENS_SPENT_PROMPT_TOTAL_STATE,
+    avgState(TOKENS_SPENT_PROMPT) as TOKENS_SPENT_PROMPT_AVG_STATE,
+    minState(TOKENS_SPENT_PROMPT) as TOKENS_SPENT_PROMPT_MIN_STATE,
+    maxState(TOKENS_SPENT_PROMPT) as TOKENS_SPENT_PROMPT_MAX_STATE,
+    
+    sumState(TOKENS_SPENT_RESPONSE) as TOKENS_SPENT_RESPONSE_TOTAL_STATE,
+    avgState(TOKENS_SPENT_RESPONSE) as TOKENS_SPENT_RESPONSE_AVG_STATE,
+    minState(TOKENS_SPENT_RESPONSE) as TOKENS_SPENT_RESPONSE_MIN_STATE,
+    maxState(TOKENS_SPENT_RESPONSE) as TOKENS_SPENT_RESPONSE_MAX_STATE,
+    
+    -- Cost calculation
+    sumState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as COST_TOTAL_STATE,
+    avgState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as COST_AVG_STATE,
+    minState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as COST_MIN_STATE,
+    maxState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as COST_MAX_STATE,
+    
+    -- Language metrics
+    groupUniqArrayState(LANG_PROMPT) as LANG_PROMPT_STATE,
+    groupUniqArrayState(LANG_RESPONSE) as LANG_RESPONSE_STATE,
+    
+    -- Sentiment metrics
+    groupUniqArrayState(SENTIMENT_PROMPT) as SENTIMENT_PROMPT_STATE,
+    groupUniqArrayState(SENTIMENT_RESPONSE) as SENTIMENT_RESPONSE_STATE,
+    maxState(SENTIMENT_PROMPT_POSITIVE) as SENTIMENT_PROMPT_POSITIVE_MAX_STATE,
+    maxState(SENTIMENT_PROMPT_NEGATIVE) as SENTIMENT_PROMPT_NEGATIVE_MAX_STATE,
+    maxState(SENTIMENT_PROMPT_NEUTRAL) as SENTIMENT_PROMPT_NEUTRAL_MAX_STATE,
+    maxState(SENTIMENT_RESPONSE_POSITIVE) as SENTIMENT_RESPONSE_POSITIVE_MAX_STATE,
+    maxState(SENTIMENT_RESPONSE_NEGATIVE) as SENTIMENT_RESPONSE_NEGATIVE_MAX_STATE,
+    maxState(SENTIMENT_RESPONSE_NEUTRAL) as SENTIMENT_RESPONSE_NEUTRAL_MAX_STATE,
+    
+    -- Readability metrics
+    avgState(READABILITY_PROMPT) as READABILITY_PROMPT_AVG_STATE,
+    minState(READABILITY_PROMPT) as READABILITY_PROMPT_MIN_STATE,
+    maxState(READABILITY_PROMPT) as READABILITY_PROMPT_MAX_STATE,
+    avgState(READABILITY_RESPONSE) as READABILITY_RESPONSE_AVG_STATE,
+    minState(READABILITY_RESPONSE) as READABILITY_RESPONSE_MIN_STATE,
+    maxState(READABILITY_RESPONSE) as READABILITY_RESPONSE_MAX_STATE,
+    
+    -- Security metrics
+    maxState(MALICIOUS_PROMPT) as MALICIOUS_PROMPT_STATE,
+    groupArrayState(MALICIOUS_PROMPT_SCORE) as MALICIOUS_PROMPT_SCORE_STATE,
+    
+    -- PII metrics
+    maxState(PII_PROMPT) as PII_PROMPT_STATE,
+    maxState(PII_RESPONSE) as PII_RESPONSE_STATE,
+    
+    -- Classification
+    argMaxState(PURPOSE_LABEL, START_TIMESTAMP) as PURPOSE_LABEL_STATE,
+    
+    -- Sample content (first message)
+    argMinState(INPUT, START_TIMESTAMP) as FIRST_INPUT_STATE,
+    argMinState(OUTPUT, START_TIMESTAMP) as FIRST_OUTPUT_STATE
+FROM traces_processed tp
+JOIN apps a ON tp.APP_ID = a.id
+WHERE TASK = 'message'
+GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000);
+
+-- Create a Distributed table for conversations
+CREATE TABLE IF NOT EXISTS traces_conversations ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_conversations_local, cityHash64(APP_ID));
+
+-- Create a view to read from the materialized view
+CREATE VIEW IF NOT EXISTS traces_conversations_view_local ON CLUSTER default AS
+SELECT
+    APP_ID,
+    CONVERSATION_ID,
+    FIRST_MESSAGE_TIMESTAMP,
+    LAST_MESSAGE_TIMESTAMP,
+    argMaxMerge(USER_ID_STATE) as USER_ID,
+    argMaxMerge(SESSION_ID_STATE) as SESSION_ID,
+    argMaxMerge(DEVICE_STATE) as DEVICE,
+    argMaxMerge(OS_STATE) as OS,
+    argMaxMerge(BROWSER_STATE) as BROWSER,
+    argMaxMerge(LOCALE_STATE) as LOCALE,
+    argMaxMerge(LOCATION_STATE) as LOCATION,
+    argMaxMerge(CHANNEL_ID_STATE) as CHANNEL_ID,
+    
+    -- Conversation metrics
+    countMerge(DIALOGUE_VOLUME_STATE) as DIALOGUE_VOLUME,
+    if(countMerge(DIALOGUE_VOLUME_STATE) = 1, 1, 0) as ONE_INTERACTION,
+    
+    -- Time metrics
+    (maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000 as TIME_TOTAL,
+    if(countMerge(DIALOGUE_VOLUME_STATE) > 1, 
+       ((maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000)/(countMerge(DIALOGUE_VOLUME_STATE)-1), 
+       0) as TIME_BETWEEN_INTERACTIONS,
+    
+    -- Content metrics
+    sumMerge(NUM_WORDS_PROMPT_TOTAL_STATE) as NUM_WORDS_PROMPT_TOTAL,
+    avgMerge(NUM_WORDS_PROMPT_AVG_STATE) as NUM_WORDS_PROMPT_AVG,
+    minMerge(NUM_WORDS_PROMPT_MIN_STATE) as NUM_WORDS_PROMPT_MIN,
+    maxMerge(NUM_WORDS_PROMPT_MAX_STATE) as NUM_WORDS_PROMPT_MAX,
+    
+    sumMerge(NUM_WORDS_RESPONSE_TOTAL_STATE) as NUM_WORDS_RESPONSE_TOTAL,
+    avgMerge(NUM_WORDS_RESPONSE_AVG_STATE) as NUM_WORDS_RESPONSE_AVG,
+    minMerge(NUM_WORDS_RESPONSE_MIN_STATE) as NUM_WORDS_RESPONSE_MIN,
+    maxMerge(NUM_WORDS_RESPONSE_MAX_STATE) as NUM_WORDS_RESPONSE_MAX,
+    
+    -- Latency metrics
+    sumMerge(TIME_LATENCY_SUM_STATE) as TIME_LATENCY_SUM,
+    avgMerge(TIME_LATENCY_AVG_STATE) as TIME_LATENCY_AVG,
+    minMerge(TIME_LATENCY_MIN_STATE) as TIME_LATENCY_MIN,
+    maxMerge(TIME_LATENCY_MAX_STATE) as TIME_LATENCY_MAX,
+    
+    -- Token metrics
+    sumMerge(TOKENS_SPENT_PROMPT_TOTAL_STATE) as TOKENS_SPENT_PROMPT_TOTAL,
+    avgMerge(TOKENS_SPENT_PROMPT_AVG_STATE) as TOKENS_SPENT_PROMPT_AVG,
+    minMerge(TOKENS_SPENT_PROMPT_MIN_STATE) as TOKENS_SPENT_PROMPT_MIN,
+    maxMerge(TOKENS_SPENT_PROMPT_MAX_STATE) as TOKENS_SPENT_PROMPT_MAX,
+    
+    sumMerge(TOKENS_SPENT_RESPONSE_TOTAL_STATE) as TOKENS_SPENT_RESPONSE_TOTAL,
+    avgMerge(TOKENS_SPENT_RESPONSE_AVG_STATE) as TOKENS_SPENT_RESPONSE_AVG,
+    minMerge(TOKENS_SPENT_RESPONSE_MIN_STATE) as TOKENS_SPENT_RESPONSE_MIN,
+    maxMerge(TOKENS_SPENT_RESPONSE_MAX_STATE) as TOKENS_SPENT_RESPONSE_MAX,
+    
+    -- Cost metrics
+    sumMerge(COST_TOTAL_STATE) as COST_TOTAL,
+    avgMerge(COST_AVG_STATE) as COST_AVG,
+    minMerge(COST_MIN_STATE) as COST_MIN,
+    maxMerge(COST_MAX_STATE) as COST_MAX,
+    
+    -- Language metrics
+    groupUniqArrayMerge(LANG_PROMPT_STATE) as LANG_PROMPT,
+    groupUniqArrayMerge(LANG_RESPONSE_STATE) as LANG_RESPONSE,
+    
+    -- Sentiment metrics
+    groupUniqArrayMerge(SENTIMENT_PROMPT_STATE) as SENTIMENT_PROMPT,
+    groupUniqArrayMerge(SENTIMENT_RESPONSE_STATE) as SENTIMENT_RESPONSE,
+    maxMerge(SENTIMENT_PROMPT_POSITIVE_MAX_STATE) as SENTIMENT_PROMPT_POSITIVE_MAX,
+    maxMerge(SENTIMENT_PROMPT_NEGATIVE_MAX_STATE) as SENTIMENT_PROMPT_NEGATIVE_MAX,
+    maxMerge(SENTIMENT_PROMPT_NEUTRAL_MAX_STATE) as SENTIMENT_PROMPT_NEUTRAL_MAX,
+    maxMerge(SENTIMENT_RESPONSE_POSITIVE_MAX_STATE) as SENTIMENT_RESPONSE_POSITIVE_MAX,
+    maxMerge(SENTIMENT_RESPONSE_NEGATIVE_MAX_STATE) as SENTIMENT_RESPONSE_NEGATIVE_MAX,
+    maxMerge(SENTIMENT_RESPONSE_NEUTRAL_MAX_STATE) as SENTIMENT_RESPONSE_NEUTRAL_MAX,
+    
+    -- Readability metrics
+    avgMerge(READABILITY_PROMPT_AVG_STATE) as READABILITY_PROMPT_AVG,
+    minMerge(READABILITY_PROMPT_MIN_STATE) as READABILITY_PROMPT_MIN,
+    maxMerge(READABILITY_PROMPT_MAX_STATE) as READABILITY_PROMPT_MAX,
+    avgMerge(READABILITY_RESPONSE_AVG_STATE) as READABILITY_RESPONSE_AVG,
+    minMerge(READABILITY_RESPONSE_MIN_STATE) as READABILITY_RESPONSE_MIN,
+    maxMerge(READABILITY_RESPONSE_MAX_STATE) as READABILITY_RESPONSE_MAX,
+    
+    -- Security metrics
+    maxMerge(MALICIOUS_PROMPT_STATE) as MALICIOUS_PROMPT,
+    groupArrayMerge(MALICIOUS_PROMPT_SCORE_STATE) as MALICIOUS_PROMPT_SCORE,
+    
+    -- PII metrics
+    maxMerge(PII_PROMPT_STATE) as PII_PROMPT,
+    maxMerge(PII_RESPONSE_STATE) as PII_RESPONSE,
+    
+    -- Classification
+    argMaxMerge(PURPOSE_LABEL_STATE) as PURPOSE_LABEL,
+    
+    -- Sample content
+    argMinMerge(FIRST_INPUT_STATE) as FIRST_INPUT,
+    argMinMerge(FIRST_OUTPUT_STATE) as FIRST_OUTPUT,
+    
+    -- Date dimensions for filtering
+    EVENT_DATE,
+    toStartOfHour(fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP)) as EVENT_HOUR,
+    
+    -- Add timestamp fields converted to DateTime for easier querying
+    fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP) as FIRST_MESSAGE_TIME,
+    fromUnixTimestamp64Milli(LAST_MESSAGE_TIMESTAMP) as LAST_MESSAGE_TIME
+FROM traces_conversations_local
+GROUP BY APP_ID, CONVERSATION_ID, FIRST_MESSAGE_TIMESTAMP, LAST_MESSAGE_TIMESTAMP, EVENT_DATE;
+
+-- Create a Distributed view for conversations view
+CREATE TABLE IF NOT EXISTS traces_conversations_view ON CLUSTER default
+ENGINE = Distributed('default', neuraltrust, traces_conversations_view_local, cityHash64(APP_ID));
+
+-- Tests table
+CREATE TABLE IF NOT EXISTS tests_local ON CLUSTER default (
+    id String,
+    scenarioId String,
+    appId String,
+    testCase String, -- JSON in ClickHouse is stored as String
+    context String,  -- JSON in ClickHouse is stored as String
+    type String,
+    contextKeys Array(String),
+    createdAt DateTime DEFAULT now(),
+    updatedAt DateTime DEFAULT now(),
+    sign Int8
+) ENGINE = ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/tests', '{replica}', sign)
+ORDER BY (id, scenarioId, appId);
+
+-- Create a Distributed table for tests
+CREATE TABLE IF NOT EXISTS tests ON CLUSTER default AS tests_local
+ENGINE = Distributed('default', neuraltrust, tests_local, rand());
+
+-- Tests Runs table
+CREATE TABLE IF NOT EXISTS test_runs_local ON CLUSTER default (
+    id String,
+    scenarioId String,
+    appId String,
+    testId String,
+    type String,
+    contextKeys Array(String),
+    failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
+    failCriteria String,
+    testCase String, -- JSON stored as String
+    score String,    -- JSON stored as String
+    executionTimeSeconds Int32 NULL,
+    runAt DateTime DEFAULT now(),
+    PRIMARY KEY (id)
+) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/test_runs', '{replica}')
+ORDER BY (id);
+
+-- Create a Distributed table for test runs
+CREATE TABLE IF NOT EXISTS test_runs ON CLUSTER default AS test_runs_local
+ENGINE = Distributed('default', neuraltrust, test_runs_local, rand());

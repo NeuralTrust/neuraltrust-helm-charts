@@ -28,7 +28,7 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "retry.max.count": "5",
     "errors.retry.timeout": "60",
     "errors.tolerance": "all",
-    "table.name": "traces_processed",
+    "table.name": "traces_processed_local",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": "false"
@@ -54,7 +54,7 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "retry.max.count": "5",
     "errors.retry.timeout": "60",
     "errors.tolerance": "all",
-    "table.name": "traces",
+    "table.name": "traces_local",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": "false"
