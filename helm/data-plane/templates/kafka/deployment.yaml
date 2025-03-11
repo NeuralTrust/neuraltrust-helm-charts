@@ -1,56 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: schemaregistry
-spec:
-  replicas: {{ .Values.dataPlane.components.kafka.schemaRegistry.replicas }}
-  selector:
-    matchLabels:
-      app: schemaregistry
-  template:
-    metadata:
-      labels:
-        app: schemaregistry
-    spec:
-      containers:
-        - name: schemaregistry
-          image: confluentinc/cp-schema-registry:7.4.1
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8081
-          env:
-            - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
-              value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
-            - name: SCHEMA_REGISTRY_LISTENERS
-              value: "http://0.0.0.0:8081"
-            - name: SCHEMA_REGISTRY_HOST_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-            - name: SCHEMA_REGISTRY_KAFKASTORE_GROUP_ID
-              value: "schema-registry"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_TOPIC
-              value: "_schemas"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR
-              value: "2"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_TIMEOUT_MS
-              value: "60000"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_INIT_TIMEOUT_MS
-              value: "60000"
-            - name: SCHEMA_REGISTRY_GROUP_ID
-              value: "schema-registry"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_REQUEST_TIMEOUT_MS
-              value: "60000"
-            - name: SCHEMA_REGISTRY_KAFKASTORE_RETRY_BACKOFF_MS
-              value: "1000"
-            - name: SCHEMA_REGISTRY_DEBUG
-              value: "true"
-            - name: SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL
-              value: "ERROR"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: kafka-connect
 spec:
   replicas: {{ .Values.dataPlane.components.kafka.connect.replicas }}
@@ -75,8 +25,6 @@ spec:
               value: "all"
             - name: CONNECT_ERRORS_RETRY_TIMEOUT
               value: "60"
-            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
-              value: "false"
             - name: CONNECT_BOOTSTRAP_SERVERS
               value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
             - name: CONNECT_GROUP_ID
@@ -96,9 +44,9 @@ spec:
             - name: CONNECT_KEY_CONVERTER
               value: "org.apache.kafka.connect.storage.StringConverter"
             - name: CONNECT_VALUE_CONVERTER
-              value: "io.confluent.connect.avro.AvroConverter"
-            - name: CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL
-              value: "http://schemaregistry:8081"
+              value: "org.apache.kafka.connect.json.JsonConverter"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
             - name: CONNECT_PLUGIN_PATH
               value: "/usr/share/java,/usr/share/confluent-hub-components,/usr/share/filestream-connectors"
             - name: CONNECT_REST_ADVERTISED_HOST_NAME

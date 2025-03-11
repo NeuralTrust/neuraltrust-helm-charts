@@ -23,8 +23,6 @@ spec:
         env:
         - name: ENV
           value: "prod"
-        - name: SCHEMA_REGISTRY_URL
-          value: "http://schemaregistry.neuraltrust.svc.cluster.local:8081"
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: "kafka:9092"
         - name: NEURALTRUST_CLASSIFIER_MODEL

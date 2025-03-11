@@ -29,6 +29,9 @@ curl -X POST connect:8083/connectors -H "Content-Type: application/json" -d '{
     "table.name": "traces_processed",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false"
+    "value.converter.schemas.enable": "false",
+    "transforms": "flattenJson",
+    "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
+    "transforms.flattenJson.delimiter": "_"
   }
 }' 

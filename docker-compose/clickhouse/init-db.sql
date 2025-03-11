@@ -70,6 +70,40 @@ CREATE TABLE IF NOT EXISTS classes
 ) ENGINE = MergeTree()
 ORDER BY (id);
 
+-- Tests table
+CREATE TABLE IF NOT EXISTS tests (
+    id String,
+    scenarioId String,
+    appId String,
+    testCase String, -- JSON in ClickHouse is stored as String
+    context String,  -- JSON in ClickHouse is stored as String
+    type String,
+    contextKeys Array(String),
+    createdAt DateTime DEFAULT now(),
+    updatedAt DateTime DEFAULT now(),
+    sign Int8
+) ENGINE = CollapsingMergeTree(sign)
+ORDER BY (id, scenarioId, appId);
+
+-- Tests Runs table
+CREATE TABLE IF NOT EXISTS test_runs (
+    id String,
+    scenarioId String,
+    appId String,
+    testId String,
+    type String,
+    contextKeys Array(String),
+    failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
+    failCriteria String,
+    testCase String, -- JSON stored as String
+    score String,    -- JSON stored as String
+    executionTimeSeconds Int32 NULL,
+    runAt DateTime DEFAULT now(),
+    sign Int8,
+    PRIMARY KEY (id)
+) ENGINE = CollapsingMergeTree(sign)
+ORDER BY (id);
+
 -- Raw traces table
 CREATE TABLE IF NOT EXISTS traces
 (
@@ -126,8 +160,8 @@ CREATE TABLE IF NOT EXISTS traces_processed
     LATENCY Int32,
     INPUT String,
     OUTPUT String,
-    FEEDBACK_TAG String,
-    FEEDBACK_TEXT String,
+    FEEDBACK_TAG String DEFAULT '',
+    FEEDBACK_TEXT String DEFAULT '',
     CHANNEL_ID String,
     USER_ID String,
     USER_EMAIL String,
@@ -141,15 +175,9 @@ CREATE TABLE IF NOT EXISTS traces_processed
     CUSTOM String,
 
     -- KPI fields
-    OUTPUT_CLASSIFIERS Nested(
-        ID Int32,
-        CATEGORY String,
-        LABEL Array(String),
-        SCORE Int32
-    ),
+    OUTPUT_CLASSIFIERS String, -- Store as JSON string
     TOKENS_SPENT_PROMPT Int32,
     TOKENS_SPENT_RESPONSE Int32,
-    READABILITY_PROMPT Float64,
     READABILITY_RESPONSE Float64,
     NUM_WORDS_PROMPT Int32,
     NUM_WORDS_RESPONSE Int32,
@@ -215,13 +243,13 @@ AS SELECT
     APP_ID,
     EVENT_DATE,
     toStartOfDay(START_TIME) as day,
-    -- Store states for aggregation
-    countState() as messages_count_state,
+    -- Message and conversation counts
+    uniqState(INTERACTION_ID) as messages_count_state,
     uniqState(CONVERSATION_ID) as conversations_count_state,
-    maxState(END_TIMESTAMP) as max_end_timestamp_state,
+    -- Timestamp metrics for calculating dialogue time
     minState(START_TIMESTAMP) as min_start_timestamp_state,
-    -- Count single message conversations
-    uniqState(if(conv_message_count = 1, CONVERSATION_ID, null)) as single_message_conv_state,
+    maxState(END_TIMESTAMP) as max_end_timestamp_state,
+    -- Word count metrics
     avgState(NUM_WORDS_PROMPT) as avg_prompt_words_state,
     avgState(NUM_WORDS_RESPONSE) as avg_response_words_state,
     -- Token metrics
@@ -231,35 +259,15 @@ AS SELECT
     -- Sentiment metrics
     sumState(SENTIMENT_PROMPT_POSITIVE) as sentiment_prompt_positive_state,
     sumState(SENTIMENT_PROMPT_NEGATIVE) as sentiment_prompt_negative_state,
-    sumState(SENTIMENT_PROMPT_NEUTRAL) as sentiment_prompt_neutral_state,
     sumState(SENTIMENT_RESPONSE_POSITIVE) as sentiment_response_positive_state,
     sumState(SENTIMENT_RESPONSE_NEGATIVE) as sentiment_response_negative_state,
-    sumState(SENTIMENT_RESPONSE_NEUTRAL) as sentiment_response_neutral_state,
-    
-FROM (
-    SELECT 
-        APP_ID,
-        START_TIME,
-        START_TIMESTAMP,
-        END_TIMESTAMP,
-        CONVERSATION_ID,
-        NUM_WORDS_PROMPT,
-        NUM_WORDS_RESPONSE,
-        TOKENS_SPENT_PROMPT,
-        TOKENS_SPENT_RESPONSE,
-        LATENCY,
-        SENTIMENT_PROMPT_POSITIVE,
-        SENTIMENT_PROMPT_NEGATIVE,
-        SENTIMENT_PROMPT_NEUTRAL,
-        SENTIMENT_RESPONSE_POSITIVE,
-        SENTIMENT_RESPONSE_NEGATIVE,
-        SENTIMENT_RESPONSE_NEUTRAL,
-        EVENT_DATE,
-        -- Count messages per conversation
-        count() OVER (PARTITION BY APP_ID, CONVERSATION_ID) as conv_message_count
-    FROM traces_processed
-    WHERE TASK = 'message'
-)
+    -- Readability metrics
+    avgState(READABILITY_RESPONSE) as readability_response_state,
+    -- Feedback metrics
+    countStateIf(1, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
+    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state
+FROM traces_processed
+WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, day;
 
 -- Language metrics view
@@ -278,7 +286,7 @@ WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, day, LANG_PROMPT;
 
 -- Create a view to calculate conversation message counts
-CREATE VIEW conversation_message_counts AS
+CREATE VIEW IF NOT EXISTS conversation_message_counts AS
 SELECT
     APP_ID,
     EVENT_DATE,
@@ -290,7 +298,7 @@ WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, day, CONVERSATION_ID;
 
 -- Create a view to calculate single message rate
-CREATE VIEW single_message_rate_view AS
+CREATE VIEW IF NOT EXISTS single_message_rate_view AS
 SELECT
     APP_ID,
     EVENT_DATE,
@@ -333,17 +341,17 @@ FROM (
 )
 GROUP BY APP_ID, EVENT_DATE, day;
 
--- Update the metrics view to include tokens per message metrics
+-- Create a view for metrics analysis
 CREATE OR REPLACE VIEW traces_metrics AS
 SELECT
     m.APP_ID AS APP_ID,
     m.EVENT_DATE AS EVENT_DATE,
     m.day AS day,
     -- Basic metrics
-    countMerge(m.messages_count_state) AS messages_count,
+    uniqMerge(m.messages_count_state) AS messages_count,
     uniqMerge(m.conversations_count_state) AS conversations_count,
     -- Calculated metrics
-    countMerge(m.messages_count_state) / uniqMerge(m.conversations_count_state) as dialogue_volume,
+    uniqMerge(m.messages_count_state) / uniqMerge(m.conversations_count_state) as dialogue_volume,
     (maxMerge(m.max_end_timestamp_state) - minMerge(m.min_start_timestamp_state))/1000/60 as dialogue_time_minutes,
     -- Get single message rate from dedicated view
     s.single_message_rate,
@@ -354,14 +362,15 @@ SELECT
     sumMerge(m.response_tokens_state) as response_tokens,
     avgMerge(m.avg_latency_state) as avg_latency,
     -- Tokens per message metrics
-    if(countMerge(m.messages_count_state) > 0, 
-       sumMerge(m.prompt_tokens_state) / countMerge(m.messages_count_state), 0) as prompt_tokens_per_message,
-    if(countMerge(m.messages_count_state) > 0, 
-       sumMerge(m.response_tokens_state) / countMerge(m.messages_count_state), 0) as response_tokens_per_message,
+    if(uniqMerge(m.messages_count_state) > 0,
+       sumMerge(m.prompt_tokens_state) / uniqMerge(m.messages_count_state), 0) as prompt_tokens_per_message,
+    if(uniqMerge(m.messages_count_state) > 0,
+       sumMerge(m.response_tokens_state) / uniqMerge(m.messages_count_state), 0) as response_tokens_per_message,
     -- Cost calculation
-    sumMerge(m.prompt_tokens_state) * a.inputCost as prompt_cost,
-    sumMerge(m.response_tokens_state) * a.outputCost as response_cost,
-    sumMerge(m.prompt_tokens_state) * a.inputCost + sumMerge(m.response_tokens_state) * a.outputCost as total_cost,
+    sumMerge(m.prompt_tokens_state) * if(a.inputCost IS NULL, 0, a.inputCost) as prompt_cost,
+    sumMerge(m.response_tokens_state) * if(a.outputCost IS NULL, 0, a.outputCost) as response_cost,
+    sumMerge(m.prompt_tokens_state) * if(a.inputCost IS NULL, 0, a.inputCost) + 
+    sumMerge(m.response_tokens_state) * if(a.outputCost IS NULL, 0, a.outputCost) as total_cost,
     -- User metrics
     uniqMerge(u.users_count_state) as users_count,
     uniqMerge(u.new_users_count_state) as new_users_count,
@@ -371,9 +380,25 @@ SELECT
     if(uniqMerge(u.users_count_state) > 0, 
        uniqMerge(u.sessions_count_state) / uniqMerge(u.users_count_state), 
        0) as sessions_per_user,
-    -- Country metrics
-    uniqMerge(u.countries_count_state) as countries_count,
-    groupArrayMerge(u.countries_state) as countries
+    
+    -- Sentiment percentages
+    100.0 * sumMerge(m.sentiment_prompt_positive_state) / 
+        nullIf(sumMerge(m.sentiment_prompt_positive_state) + sumMerge(m.sentiment_prompt_negative_state), 0) AS sentiment_prompt_positive,
+    100.0 * sumMerge(m.sentiment_prompt_negative_state) / 
+        nullIf(sumMerge(m.sentiment_prompt_positive_state) + sumMerge(m.sentiment_prompt_negative_state), 0) AS sentiment_prompt_negative,
+    100.0 * sumMerge(m.sentiment_response_positive_state) / 
+        nullIf(sumMerge(m.sentiment_response_positive_state) + sumMerge(m.sentiment_response_negative_state), 0) AS sentiment_response_positive,
+    100.0 * sumMerge(m.sentiment_response_negative_state) / 
+        nullIf(sumMerge(m.sentiment_response_positive_state) + sumMerge(m.sentiment_response_negative_state), 0) AS sentiment_response_negative,
+    
+    -- Readability metrics
+    avgMerge(m.readability_response_state) as readability,
+    
+    -- Feedback metrics
+    countMerge(m.feedback_positive_count_state) as feedback_positive,
+    countMerge(m.feedback_negative_count_state) as feedback_negative,
+    100.0 * countMerge(m.feedback_positive_count_state) / uniqMerge(m.messages_count_state) as feedback_positive_rate,
+    100.0 * countMerge(m.feedback_negative_count_state) / uniqMerge(m.messages_count_state) as feedback_negative_rate
 FROM traces_usage_metrics m
 LEFT JOIN single_message_rate_view s ON m.APP_ID = s.APP_ID AND m.EVENT_DATE = s.EVENT_DATE AND m.day = s.day
 LEFT JOIN traces_user_metrics u ON m.APP_ID = u.APP_ID AND m.EVENT_DATE = u.EVENT_DATE AND m.day = u.day
@@ -393,7 +418,7 @@ WHERE TASK = 'message' AND LOCATION != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), LOCATION
 ORDER BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), count DESC;
 
--- Update the total metrics view to include user and session metrics
+-- Update the total metrics view to include READABILITY metrics
 CREATE OR REPLACE VIEW traces_metrics_total AS
 SELECT 
     m.APP_ID,
@@ -409,18 +434,30 @@ SELECT
     sum(m.response_tokens) as total_response_tokens,
     avg(m.avg_latency) as avg_latency,
     -- Cost calculation
+    sum(m.prompt_cost) as prompt_cost,
+    sum(m.response_cost) as response_cost,
     sum(m.total_cost) as total_cost,
     -- User metrics
     sum(m.users_count) as total_users,
     sum(m.new_users_count) as total_new_users,
     -- Session metrics
     sum(m.sessions_count) as total_sessions,
-    avg(m.sessions_per_user) as avg_sessions_per_user
+    avg(m.sessions_per_user) as avg_sessions_per_user,
+    -- Sentiment metrics
+    avg(m.sentiment_prompt_positive) as sentiment_prompt_positive,
+    avg(m.sentiment_prompt_negative) as sentiment_prompt_negative,
+    avg(m.sentiment_response_positive) as sentiment_response_positive,
+    avg(m.sentiment_response_negative) as sentiment_response_negative,
+    -- Readability metrics
+    avg(m.readability) as readability,
+    -- Feedback metrics
+    avg(m.feedback_positive_rate) as feedback_positive_rate,
+    avg(m.feedback_negative_rate) as feedback_negative_rate
 FROM traces_metrics m
 GROUP BY m.APP_ID;
 
 -- Separate language metrics view
-CREATE VIEW traces_language_daily AS
+CREATE VIEW IF NOT EXISTS traces_language_daily AS
 SELECT
     APP_ID,
     EVENT_DATE,
@@ -432,7 +469,7 @@ GROUP BY APP_ID, EVENT_DATE, day, LANG_PROMPT
 ORDER BY APP_ID, EVENT_DATE, day, count DESC;
 
 -- Total language metrics view
-CREATE VIEW traces_language_total AS
+CREATE VIEW IF NOT EXISTS traces_language_total AS
 SELECT
     APP_ID,
     LANG_PROMPT as language,
@@ -441,12 +478,9 @@ FROM traces_language_metrics
 GROUP BY APP_ID, LANG_PROMPT
 ORDER BY APP_ID, count DESC;
 
--- Drop the separate token metrics view since it's now redundant
-DROP VIEW IF EXISTS traces_all_metrics;
-DROP VIEW IF EXISTS traces_token_metrics;
 
 -- Device metrics view
-CREATE MATERIALIZED VIEW traces_device_metrics
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_device_metrics
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, DEVICE)
@@ -461,7 +495,7 @@ WHERE TASK = 'message' AND DEVICE != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), DEVICE;
 
 -- Browser metrics view
-CREATE MATERIALIZED VIEW traces_browser_metrics
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_browser_metrics
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, BROWSER)
@@ -476,7 +510,7 @@ WHERE TASK = 'message' AND BROWSER != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), BROWSER;
 
 -- OS metrics view
-CREATE MATERIALIZED VIEW traces_os_metrics
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_os_metrics
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, OS)
@@ -552,8 +586,8 @@ WHERE TASK = 'message' AND USER_ID != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
 -- Security metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics_local ON CLUSTER default
-ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_security_metrics', '{replica}')
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics
+ENGINE = AggregatingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day)
 AS SELECT
@@ -604,13 +638,9 @@ FROM traces_processed
 WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
 
--- Create a Distributed table for security metrics
-CREATE TABLE IF NOT EXISTS traces_security_metrics ON CLUSTER default
-ENGINE = Distributed('default', neuraltrust, traces_security_metrics_local, cityHash64(APP_ID));
-
 -- Create a materialized view with its own storage engine for conversation aggregation
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_conversations_local ON CLUSTER default
-ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/traces_conversations', '{replica}')
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_conversations
+ENGINE = AggregatingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (APP_ID, CONVERSATION_ID)
 AS SELECT
@@ -684,12 +714,7 @@ AS SELECT
     maxState(SENTIMENT_RESPONSE_NEUTRAL) as SENTIMENT_RESPONSE_NEUTRAL_MAX_STATE,
     
     -- Readability metrics
-    avgState(READABILITY_PROMPT) as READABILITY_PROMPT_AVG_STATE,
-    minState(READABILITY_PROMPT) as READABILITY_PROMPT_MIN_STATE,
-    maxState(READABILITY_PROMPT) as READABILITY_PROMPT_MAX_STATE,
     avgState(READABILITY_RESPONSE) as READABILITY_RESPONSE_AVG_STATE,
-    minState(READABILITY_RESPONSE) as READABILITY_RESPONSE_MIN_STATE,
-    maxState(READABILITY_RESPONSE) as READABILITY_RESPONSE_MAX_STATE,
     
     -- Security metrics
     maxState(MALICIOUS_PROMPT) as MALICIOUS_PROMPT_STATE,
@@ -710,12 +735,8 @@ JOIN apps a ON tp.APP_ID = a.id
 WHERE TASK = 'message'
 GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000);
 
--- Create a Distributed table for conversations
-CREATE TABLE IF NOT EXISTS traces_conversations ON CLUSTER default
-ENGINE = Distributed('default', neuraltrust, traces_conversations_local, cityHash64(APP_ID));
-
 -- Create a view to read from the materialized view
-CREATE VIEW IF NOT EXISTS traces_conversations_view_local ON CLUSTER default AS
+CREATE VIEW IF NOT EXISTS traces_conversations_view AS
 SELECT
     APP_ID,
     CONVERSATION_ID,
@@ -789,12 +810,7 @@ SELECT
     maxMerge(SENTIMENT_RESPONSE_NEUTRAL_MAX_STATE) as SENTIMENT_RESPONSE_NEUTRAL_MAX,
     
     -- Readability metrics
-    avgMerge(READABILITY_PROMPT_AVG_STATE) as READABILITY_PROMPT_AVG,
-    minMerge(READABILITY_PROMPT_MIN_STATE) as READABILITY_PROMPT_MIN,
-    maxMerge(READABILITY_PROMPT_MAX_STATE) as READABILITY_PROMPT_MAX,
-    avgMerge(READABILITY_RESPONSE_AVG_STATE) as READABILITY_RESPONSE_AVG,
-    minMerge(READABILITY_RESPONSE_MIN_STATE) as READABILITY_RESPONSE_MIN,
-    maxMerge(READABILITY_RESPONSE_MAX_STATE) as READABILITY_RESPONSE_MAX,
+    avgMerge(READABILITY_RESPONSE_AVG_STATE) as READABILITY_RESPONSE,
     
     -- Security metrics
     maxMerge(MALICIOUS_PROMPT_STATE) as MALICIOUS_PROMPT,
@@ -818,50 +834,198 @@ SELECT
     -- Add timestamp fields converted to DateTime for easier querying
     fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP) as FIRST_MESSAGE_TIME,
     fromUnixTimestamp64Milli(LAST_MESSAGE_TIMESTAMP) as LAST_MESSAGE_TIME
-FROM traces_conversations_local
+FROM traces_conversations
 GROUP BY APP_ID, CONVERSATION_ID, FIRST_MESSAGE_TIMESTAMP, LAST_MESSAGE_TIMESTAMP, EVENT_DATE;
 
--- Create a Distributed view for conversations view
-CREATE TABLE IF NOT EXISTS traces_conversations_view ON CLUSTER default
-ENGINE = Distributed('default', neuraltrust, traces_conversations_view_local, cityHash64(APP_ID));
+-- Create a view for classifier analysis with simpler JSON parsing
+CREATE OR REPLACE VIEW classifier_analysis AS
+SELECT
+    APP_ID,
+    EVENT_DATE,
+    toStartOfDay(START_TIME) as day,
+    CLASSIFIER_ID,
+    CATEGORY_ID,
+    LABEL_ID,
+    SCORE,
+    count() AS count
+FROM (
+    SELECT
+        APP_ID,
+        EVENT_DATE,
+        START_TIME,
+        JSONExtractInt(json, 'ID') AS CLASSIFIER_ID,
+        JSONExtractString(json, 'CATEGORY') AS CATEGORY_ID,
+        JSONExtractString(label) AS LABEL_ID,  -- Extract string value here
+        JSONExtractInt(json, 'SCORE') AS SCORE
+    FROM traces_processed
+    ARRAY JOIN JSONExtractArrayRaw(OUTPUT_CLASSIFIERS) AS json
+    ARRAY JOIN JSONExtractArrayRaw(json, 'LABEL') AS label
+    WHERE OUTPUT_CLASSIFIERS IS NOT NULL AND OUTPUT_CLASSIFIERS != ''
+)
+GROUP BY APP_ID, EVENT_DATE, day, CLASSIFIER_ID, CATEGORY_ID, LABEL_ID, SCORE;
 
--- Tests table
-CREATE TABLE IF NOT EXISTS tests_local ON CLUSTER default (
-    id String,
-    scenarioId String,
-    appId String,
-    testCase String, -- JSON in ClickHouse is stored as String
-    context String,  -- JSON in ClickHouse is stored as String
-    type String,
-    contextKeys Array(String),
-    createdAt DateTime DEFAULT now(),
-    updatedAt DateTime DEFAULT now(),
-    sign Int8
-) ENGINE = ReplicatedCollapsingMergeTree('/clickhouse/tables/{shard}/tests', '{replica}', sign)
-ORDER BY (id, scenarioId, appId);
+-- Create a materialized view for daily classifier KPIs
+CREATE MATERIALIZED VIEW IF NOT EXISTS kpi_topics_1d
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(day)
+ORDER BY (day, APP_ID, CLASSIFIER_ID, CATEGORY_ID, LABEL_ID)
+AS SELECT
+    toDate(toStartOfDay(START_TIME)) AS day,
+    APP_ID,
+    CLASSIFIER_ID,
+    CATEGORY_ID,
+    LABEL_ID,
+    SCORE,
+    
+    -- Conversation and message counts
+    uniqState(CONVERSATION_ID) AS conversations_count_state,
+    uniqState(INTERACTION_ID) AS messages_count_state,
+    
+    -- Sentiment metrics
+    sumState(SENTIMENT_PROMPT_POSITIVE) AS sentiment_prompt_positive_state,
+    sumState(SENTIMENT_PROMPT_NEGATIVE) AS sentiment_prompt_negative_state,
+    sumState(SENTIMENT_RESPONSE_POSITIVE) AS sentiment_response_positive_state,
+    sumState(SENTIMENT_RESPONSE_NEGATIVE) AS sentiment_response_negative_state,
+    
+    -- Language metrics
+    countState(LANG_PROMPT) AS lang_prompt_count_state,
+    countState(LANG_RESPONSE) AS lang_response_count_state,
+    
+    -- PII metrics
+    sumState(PII_PROMPT) AS pii_prompt_state,
+    sumState(PII_RESPONSE) AS pii_response_state,
+    
+    -- Malicious content metrics
+    sumState(MALICIOUS_PROMPT) AS malicious_prompt_state,
+    
+    -- Word count metrics
+    sumState(NUM_WORDS_PROMPT) AS num_words_prompt_state,
+    sumState(NUM_WORDS_RESPONSE) AS num_words_response_state,
+    
+    -- Token metrics
+    sumState(TOKENS_SPENT_PROMPT) AS tokens_spent_prompt_state,
+    sumState(TOKENS_SPENT_RESPONSE) AS tokens_spent_response_state,
+    
+    -- Readability metrics
+    avgState(READABILITY_RESPONSE) AS readability_response_state,
+    
+    -- Cost metrics - store tokens for later calculation with app costs
+    sumState(TOKENS_SPENT_PROMPT) AS cost_prompt_state,
+    sumState(TOKENS_SPENT_RESPONSE) AS cost_response_state,
+    
+    -- Time metrics
+    maxState(time_diff) AS time_total_state,
+    sumState(LATENCY) AS time_latency_state,
+    
+    -- Dialogue time metrics
+    minState(START_TIME) AS min_start_time_state,
+    maxState(END_TIMESTAMP) AS max_end_time_state,
+    uniqState(INTERACTION_ID) AS dialogue_volume_state,
+    
+    -- Feedback metrics
+    countStateIf(1, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
+    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state
+FROM (
+    SELECT
+        APP_ID,
+        START_TIME,
+        END_TIMESTAMP,
+        CONVERSATION_ID,
+        INTERACTION_ID,
+        SENTIMENT_PROMPT_POSITIVE,
+        SENTIMENT_PROMPT_NEGATIVE,
+        SENTIMENT_PROMPT_NEUTRAL,
+        SENTIMENT_RESPONSE_POSITIVE,
+        SENTIMENT_RESPONSE_NEGATIVE,
+        SENTIMENT_RESPONSE_NEUTRAL,
+        LANG_PROMPT,
+        LANG_RESPONSE,
+        PII_PROMPT,
+        PII_RESPONSE,
+        MALICIOUS_PROMPT,
+        NUM_WORDS_PROMPT,
+        NUM_WORDS_RESPONSE,
+        TOKENS_SPENT_PROMPT,
+        TOKENS_SPENT_RESPONSE,
+        READABILITY_RESPONSE,
+        LATENCY,
+        FEEDBACK_TAG,
+        JSONExtractInt(json, 'ID') AS CLASSIFIER_ID,
+        JSONExtractString(json, 'CATEGORY') AS CATEGORY_ID,
+        JSONExtractString(label) AS LABEL_ID,
+        JSONExtractInt(json, 'SCORE') AS SCORE,
+        toInt64(END_TIMESTAMP) - toInt64(START_TIME) AS time_diff
+    FROM traces_processed
+    ARRAY JOIN JSONExtractArrayRaw(OUTPUT_CLASSIFIERS) AS json
+    ARRAY JOIN JSONExtractArrayRaw(json, 'LABEL') AS label
+    WHERE OUTPUT_CLASSIFIERS IS NOT NULL AND OUTPUT_CLASSIFIERS != '' AND TASK = 'message'
+)
+GROUP BY day, APP_ID, CLASSIFIER_ID, CATEGORY_ID, LABEL_ID, SCORE;
 
--- Create a Distributed table for tests
-CREATE TABLE IF NOT EXISTS tests ON CLUSTER default AS tests_local
-ENGINE = Distributed('default', neuraltrust, tests_local, rand());
-
--- Tests Runs table
-CREATE TABLE IF NOT EXISTS test_runs_local ON CLUSTER default (
-    id String,
-    scenarioId String,
-    appId String,
-    testId String,
-    type String,
-    contextKeys Array(String),
-    failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
-    failCriteria String,
-    testCase String, -- JSON stored as String
-    score String,    -- JSON stored as String
-    executionTimeSeconds Int32 NULL,
-    runAt DateTime DEFAULT now(),
-    PRIMARY KEY (id)
-) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/test_runs', '{replica}')
-ORDER BY (id);
-
--- Create a Distributed table for test runs
-CREATE TABLE IF NOT EXISTS test_runs ON CLUSTER default AS test_runs_local
-ENGINE = Distributed('default', neuraltrust, test_runs_local, rand());
+-- Create a view for querying the aggregated data with app costs
+CREATE OR REPLACE VIEW kpi_topics_1d_view AS
+SELECT
+    k.day,
+    k.APP_ID,
+    k.CLASSIFIER_ID,
+    k.CATEGORY_ID,
+    k.LABEL_ID,
+    
+    -- Cost calculation using app costs (default to 0 if NULL)
+    sumMerge(k.cost_prompt_state) * if(a.inputCost IS NULL, 0, a.inputCost) + 
+    sumMerge(k.cost_response_state) * if(a.outputCost IS NULL, 0, a.outputCost) AS COST,
+    
+    -- Conversation and message counts
+    uniqMerge(k.conversations_count_state) AS CONVERSATIONS,
+    uniqMerge(k.messages_count_state) AS MESSAGES,
+    uniqMerge(k.messages_count_state) / uniqMerge(k.conversations_count_state) AS DIALOGUE_VOLUME,
+    
+    -- Sentiment percentages
+    100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0) AS SENTIMENT_PROMPT_POSITIVE,
+    100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0) AS SENTIMENT_PROMPT_NEGATIVE,
+    100.0 * sumMerge(k.sentiment_response_positive_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0) AS SENTIMENT_RESPONSE_POSITIVE,
+    100.0 * sumMerge(k.sentiment_response_negative_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0) AS SENTIMENT_RESPONSE_NEGATIVE,
+    
+    -- Language metrics
+    countMerge(k.lang_prompt_count_state) AS LANG_PROMPT,
+    countMerge(k.lang_response_count_state) AS LANG_RESPONSE,
+    
+    -- PII metrics
+    sumMerge(k.pii_prompt_state) AS PII_PROMPT,
+    sumMerge(k.pii_response_state) AS PII_RESPONSE,
+    
+    -- Malicious content metrics
+    sumMerge(k.malicious_prompt_state) AS MALICIOUS_PROMPT,
+    
+    -- Word count metrics
+    sumMerge(k.num_words_prompt_state) AS NUM_WORDS_PROMPT,
+    sumMerge(k.num_words_response_state) AS NUM_WORDS_RESPONSE,
+    
+    -- Token metrics
+    sumMerge(k.tokens_spent_prompt_state) AS TOKENS_SPENT_PROMPT,
+    sumMerge(k.tokens_spent_response_state) AS TOKENS_SPENT_RESPONSE,
+    
+    -- Readability metrics
+    avgMerge(k.readability_response_state) AS READABILITY_RESPONSE,
+    
+    -- Time metrics
+    maxMerge(k.time_total_state) AS TIME_TOTAL,
+    sumMerge(k.time_latency_state) AS TIME_LATENCY,
+    
+    -- Dialogue time metrics - using simpler calculation
+    if(uniqMerge(k.dialogue_volume_state) > 1,
+        maxMerge(k.time_total_state) / (uniqMerge(k.dialogue_volume_state) - 1), 
+        0) AS TIME_BETWEEN_INTERACTIONS,
+    
+    -- Feedback metrics
+    countMerge(k.feedback_positive_count_state) as FEEDBACK_POSITIVE,
+    countMerge(k.feedback_negative_count_state) as FEEDBACK_NEGATIVE,
+    100.0 * countMerge(k.feedback_positive_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_POSITIVE_RATE,
+    100.0 * countMerge(k.feedback_negative_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_NEGATIVE_RATE
+FROM kpi_topics_1d k
+LEFT JOIN apps a ON k.APP_ID = a.id
+GROUP BY k.day, k.APP_ID, k.CLASSIFIER_ID, k.CATEGORY_ID, k.LABEL_ID, a.inputCost, a.outputCost;

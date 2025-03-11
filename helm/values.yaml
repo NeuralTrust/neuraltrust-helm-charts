@@ -119,8 +119,6 @@ dataPlane:
           memory: 1Gi
     kafka:
       enabled: true
-      schemaRegistry:
-        replicas: 1
       connect:
         replicas: 1
       broker:

@@ -32,6 +32,11 @@ spec:
               secretKeyRef:
                 name: data-plane-jwt-secret
                 key: DATA_PLANE_JWT_SECRET
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: openai-secrets
+                key: OPENAI_API_KEY
           - name: KAFKA_BOOTSTRAP_SERVERS
             value: "kafka:9092"
           - name: HF_HOME
