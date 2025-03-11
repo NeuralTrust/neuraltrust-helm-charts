@@ -27,6 +27,8 @@ spec:
         ports:
         - containerPort: 8000
         env:
+        - name: DEFAULT_DATA_PLANE_URL
+          value: {{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
@@ -57,3 +59,8 @@ spec:
             secretKeyRef:
               name: control-plane-jwt-secret
               key: CONTROL_PLANE_JWT_SECRET
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-secrets
+              key: OPENAI_API_KEY

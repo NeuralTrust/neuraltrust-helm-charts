@@ -198,19 +198,17 @@ install_databases() {
     # Create ClickHouse configuration to reduce logging and improve performance
     helm upgrade --install clickhouse bitnami/clickhouse \
         --namespace "$NAMESPACE" \
-        -f "$VALUES_FILE" \
         --set auth.username=neuraltrust \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
-        --set shards=2 \
-        --set replicaCount=2 \
+        --set shards=1 \
+        --set replicaCount=1 \
+        --set zookeeper.enabled=false \
         --set persistence.size=100Gi \
-        --set resources.limits.memory=4Gi \
-        --set resources.requests.memory=2Gi \
-        --set resources.limits.cpu=2 \
-        --set resources.requests.cpu=1 \
+        --set resources.limits.memory=8Gi \
+        --set resources.requests.memory=4Gi \
+        --set resources.limits.cpu=4 \
+        --set resources.requests.cpu=2 \
         --set logLevel=fatal \
-        --set clickhouse.configuration.keeper_map_path_prefix="/clickhouse/keeper_map" \
-        --set clickhouse.configuration.keeper_server.storage_path="/var/lib/clickhouse/coordination" \
         --wait
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
     log_info "Password: $CLICKHOUSE_PASSWORD"

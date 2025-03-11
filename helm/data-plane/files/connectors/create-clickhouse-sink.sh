@@ -31,7 +31,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "table.name": "traces_processed",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false"
+    "value.converter.schemas.enable": "false",
+    "transforms": "flattenJson",
+    "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
+    "transforms.flattenJson.delimiter": "_"
   }
 }' 
 
@@ -57,6 +60,9 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "table.name": "traces",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false"
+    "value.converter.schemas.enable": "false",
+    "transforms": "flattenJson",
+    "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
+    "transforms.flattenJson.delimiter": "_"
   }
 }' 
