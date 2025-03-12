@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     scenarioId String,
     appId String,
     testId String,
+    executionId String,
     type String,
     contextKeys Array(String),
     failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
