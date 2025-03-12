@@ -29,7 +29,7 @@ services:
       - ../../kafka-workers:/code
       - ./scripts:/scripts
     depends_on:
-      - clickhouse
+      # - clickhouse
       - broker
       - schema-registry
 
