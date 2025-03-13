@@ -21,9 +21,9 @@ spec:
         - containerPort: 3030
         env:
         - name: LOGIN_ORIGIN
-          value: "http://neuraltrust-trigger.neuraltrust.svc.cluster.local:3030"
+          value: "http://trigger.{{ .Release.Namespace }}.svc.cluster.local:3030"
         - name: APP_ORIGIN
-          value: "http://neuraltrust-trigger.neuraltrust.svc.cluster.local:3030"
+          value: "http://trigger.{{ .Release.Namespace }}.svc.cluster.local:3030"
         - name: PORT
           value: "3030"
         - name: REMIX_APP_PORT
@@ -63,11 +63,13 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_HOST
-        - name: POSTGRES_DATABASE
+        - name: POSTGRES_PORT
           valueFrom:
             secretKeyRef:
               name: postgresql-secrets
-              key: POSTGRES_DB
+              key: POSTGRES_PORT
+        - name: POSTGRES_DATABASE
+          value: "trigger"
         - name: DATABASE_URL
           value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
         - name: DIRECT_URL

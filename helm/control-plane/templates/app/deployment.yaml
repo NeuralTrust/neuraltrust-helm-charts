@@ -165,7 +165,7 @@ spec:
         - name: OPENAI_MODEL
           value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
         - name: TRIGGER_API_URL
-          value: "http://neuraltrust-trigger.neuraltrust.svc.cluster.local:3030"
+          value: "http://trigger.{{ .Release.Namespace }}.svc.cluster.local:3030"
         - name: TRIGGER_API_KEY
           valueFrom:
             secretKeyRef:

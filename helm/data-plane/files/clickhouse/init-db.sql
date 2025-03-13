@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     scenarioId String,
     appId String,
     testId String,
+    executionId String,
     type String,
     contextKeys Array(String),
     failure UInt8, -- Boolean in ClickHouse is represented as UInt8 (0 or 1)
@@ -352,7 +353,8 @@ SELECT
     uniqMerge(m.conversations_count_state) AS conversations_count,
     -- Calculated metrics
     uniqMerge(m.messages_count_state) / uniqMerge(m.conversations_count_state) as dialogue_volume,
-    (maxMerge(m.max_end_timestamp_state) - minMerge(m.min_start_timestamp_state))/1000/60 as dialogue_time_minutes,
+    -- Use the accurate dialogue time from conversations view
+    max(c.TIME_TOTAL) as dialogue_time_seconds,
     -- Get single message rate from dedicated view
     s.single_message_rate,
     avgMerge(m.avg_prompt_words_state) as avg_prompt_words,
@@ -381,15 +383,17 @@ SELECT
        uniqMerge(u.sessions_count_state) / uniqMerge(u.users_count_state), 
        0) as sessions_per_user,
     
-    -- Sentiment percentages
-    100.0 * sumMerge(m.sentiment_prompt_positive_state) / 
-        nullIf(sumMerge(m.sentiment_prompt_positive_state) + sumMerge(m.sentiment_prompt_negative_state), 0) AS sentiment_prompt_positive,
-    100.0 * sumMerge(m.sentiment_prompt_negative_state) / 
-        nullIf(sumMerge(m.sentiment_prompt_positive_state) + sumMerge(m.sentiment_prompt_negative_state), 0) AS sentiment_prompt_negative,
-    100.0 * sumMerge(m.sentiment_response_positive_state) / 
-        nullIf(sumMerge(m.sentiment_response_positive_state) + sumMerge(m.sentiment_response_negative_state), 0) AS sentiment_response_positive,
-    100.0 * sumMerge(m.sentiment_response_negative_state) / 
-        nullIf(sumMerge(m.sentiment_response_positive_state) + sumMerge(m.sentiment_response_negative_state), 0) AS sentiment_response_negative,
+    -- Sentiment metrics
+    sumMerge(m.sentiment_prompt_positive_state) AS sentiment_prompt_positive,
+    sumMerge(m.sentiment_prompt_negative_state) AS sentiment_prompt_negative,
+    sumMerge(m.sentiment_response_positive_state) AS sentiment_response_positive,
+    sumMerge(m.sentiment_response_negative_state) AS sentiment_response_negative,
+    
+    -- Sentiment rate metrics (percentage of messages with positive/negative sentiment)
+    100.0 * sumMerge(m.sentiment_prompt_positive_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_positive_rate,
+    100.0 * sumMerge(m.sentiment_prompt_negative_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_negative_rate,
+    100.0 * sumMerge(m.sentiment_response_positive_state) / uniqMerge(m.messages_count_state) as sentiment_response_positive_rate,
+    100.0 * sumMerge(m.sentiment_response_negative_state) / uniqMerge(m.messages_count_state) as sentiment_response_negative_rate,
     
     -- Readability metrics
     avgMerge(m.readability_response_state) as readability,
@@ -402,6 +406,7 @@ SELECT
 FROM traces_usage_metrics m
 LEFT JOIN single_message_rate_view s ON m.APP_ID = s.APP_ID AND m.EVENT_DATE = s.EVENT_DATE AND m.day = s.day
 LEFT JOIN traces_user_metrics u ON m.APP_ID = u.APP_ID AND m.EVENT_DATE = u.EVENT_DATE AND m.day = u.day
+LEFT JOIN traces_conversations_view c ON m.APP_ID = c.APP_ID
 LEFT JOIN apps a ON m.APP_ID = a.id
 GROUP BY m.APP_ID, m.EVENT_DATE, m.day, s.single_message_rate, a.inputCost, a.outputCost;
 
@@ -425,7 +430,7 @@ SELECT
     sum(m.messages_count) as total_messages,
     sum(m.conversations_count) as total_conversations,
     avg(m.dialogue_volume) as avg_dialogue_volume,
-    avg(m.dialogue_time_minutes) as avg_dialogue_time,
+    avg(m.dialogue_time_seconds) as avg_dialogue_time,
     avg(m.single_message_rate) as avg_single_message_rate,
     avg(m.avg_prompt_words) as avg_prompt_words,
     avg(m.avg_response_words) as avg_response_words,
@@ -540,33 +545,35 @@ FROM traces_processed
 WHERE TASK = 'message' AND CHANNEL_ID IS NOT NULL
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), CHANNEL_ID;
 
--- User engagement metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_engagement_metrics
+-- First, create a materialized view to collect user engagement data
+CREATE MATERIALIZED VIEW IF NOT EXISTS traces_user_engagement_data
 ENGINE = AggregatingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
-ORDER BY (EVENT_DATE, APP_ID, day)
+ORDER BY (EVENT_DATE, APP_ID, day, USER_ID)
 AS SELECT
     APP_ID,
     EVENT_DATE,
     toStartOfDay(START_TIME) as day,
-    -- Active users (users with more than 3 messages)
-    uniqState(USER_ID) as active_users_state,
-    -- Total API calls
-    sumState(API_CALLS) as total_calls_state,
-    -- Store user-level data for calculating avg and max
-    groupArrayState((USER_ID, API_CALLS)) as user_calls_state
-FROM (
-    SELECT
-        APP_ID,
-        EVENT_DATE,
-        START_TIME,
-        USER_ID,
-        count() as MESSAGE_COUNT,
-        count() as API_CALLS
-    FROM traces_processed
-    WHERE TASK = 'message' AND USER_ID != ''
-    GROUP BY APP_ID, EVENT_DATE, START_TIME, USER_ID
-)
+    USER_ID,
+    -- Count interactions per user
+    count() as interaction_count
+FROM traces_processed
+WHERE USER_ID != ''
+GROUP BY APP_ID, EVENT_DATE, day, USER_ID;
+
+-- Then create a regular view on top of the materialized view
+CREATE OR REPLACE VIEW traces_engagement_metrics AS
+SELECT
+    APP_ID,
+    EVENT_DATE,
+    day,
+    -- User metrics
+    uniqExact(USER_ID) as active_users,
+    -- Average calls per user
+    sum(interaction_count) / uniqExact(USER_ID) as avg_calls_per_user,
+    -- Maximum calls per user
+    max(interaction_count) as max_calls_per_user
+FROM traces_user_engagement_data
 GROUP BY APP_ID, EVENT_DATE, day;
 
 -- Top users by requests view with AggregatingMergeTree engine
@@ -647,6 +654,7 @@ AS SELECT
     APP_ID,
     CONVERSATION_ID,
     toDate(START_TIMESTAMP / 1000) as EVENT_DATE,
+    toStartOfDay(START_TIME) as day,
     min(START_TIMESTAMP) as FIRST_MESSAGE_TIMESTAMP,
     max(END_TIMESTAMP) as LAST_MESSAGE_TIMESTAMP,
     argMaxState(USER_ID, START_TIMESTAMP) as USER_ID_STATE,
@@ -733,15 +741,17 @@ AS SELECT
 FROM traces_processed tp
 JOIN apps a ON tp.APP_ID = a.id
 WHERE TASK = 'message'
-GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000);
+GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000), toStartOfDay(START_TIME);
+
 
 -- Create a view to read from the materialized view
-CREATE VIEW IF NOT EXISTS traces_conversations_view AS
+CREATE OR REPLACE VIEW traces_conversations_view AS
 SELECT
     APP_ID,
     CONVERSATION_ID,
-    FIRST_MESSAGE_TIMESTAMP,
-    LAST_MESSAGE_TIMESTAMP,
+    -- Use minMerge and maxMerge to get the true first and last timestamps
+    minMerge(MIN_START_TIMESTAMP_STATE) as FIRST_MESSAGE_TIMESTAMP,
+    maxMerge(MAX_END_TIMESTAMP_STATE) as LAST_MESSAGE_TIMESTAMP,
     argMaxMerge(USER_ID_STATE) as USER_ID,
     argMaxMerge(SESSION_ID_STATE) as SESSION_ID,
     argMaxMerge(DEVICE_STATE) as DEVICE,
@@ -755,7 +765,7 @@ SELECT
     countMerge(DIALOGUE_VOLUME_STATE) as DIALOGUE_VOLUME,
     if(countMerge(DIALOGUE_VOLUME_STATE) = 1, 1, 0) as ONE_INTERACTION,
     
-    -- Time metrics
+    -- Time metrics - calculate directly from the timestamps
     (maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000 as TIME_TOTAL,
     if(countMerge(DIALOGUE_VOLUME_STATE) > 1, 
        ((maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000)/(countMerge(DIALOGUE_VOLUME_STATE)-1), 
@@ -827,15 +837,11 @@ SELECT
     argMinMerge(FIRST_INPUT_STATE) as FIRST_INPUT,
     argMinMerge(FIRST_OUTPUT_STATE) as FIRST_OUTPUT,
     
-    -- Date dimensions for filtering
-    EVENT_DATE,
-    toStartOfHour(fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP)) as EVENT_HOUR,
-    
     -- Add timestamp fields converted to DateTime for easier querying
-    fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP) as FIRST_MESSAGE_TIME,
-    fromUnixTimestamp64Milli(LAST_MESSAGE_TIMESTAMP) as LAST_MESSAGE_TIME
+    fromUnixTimestamp64Milli(minMerge(MIN_START_TIMESTAMP_STATE)) as FIRST_MESSAGE_TIME,
+    fromUnixTimestamp64Milli(maxMerge(MAX_END_TIMESTAMP_STATE)) as LAST_MESSAGE_TIME
 FROM traces_conversations
-GROUP BY APP_ID, CONVERSATION_ID, FIRST_MESSAGE_TIMESTAMP, LAST_MESSAGE_TIMESTAMP, EVENT_DATE;
+GROUP BY APP_ID, CONVERSATION_ID;
 
 -- Create a view for classifier analysis with simpler JSON parsing
 CREATE OR REPLACE VIEW classifier_analysis AS
@@ -980,15 +986,36 @@ SELECT
     uniqMerge(k.messages_count_state) AS MESSAGES,
     uniqMerge(k.messages_count_state) / uniqMerge(k.conversations_count_state) AS DIALOGUE_VOLUME,
     
-    -- Sentiment percentages
-    100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0) AS SENTIMENT_PROMPT_POSITIVE,
-    100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0) AS SENTIMENT_PROMPT_NEGATIVE,
-    100.0 * sumMerge(k.sentiment_response_positive_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0) AS SENTIMENT_RESPONSE_POSITIVE,
-    100.0 * sumMerge(k.sentiment_response_negative_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0) AS SENTIMENT_RESPONSE_NEGATIVE,
+    -- Sentiment percentages - with default values of 0 instead of NULL
+    if(isNull(100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)),
+        0,
+        100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_POSITIVE,
+    
+    if(isNull(100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)),
+        0,
+        100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
+        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_NEGATIVE,
+    
+    if(isNull(100.0 * sumMerge(k.sentiment_response_positive_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)),
+        0,
+        100.0 * sumMerge(k.sentiment_response_positive_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_POSITIVE,
+    
+    if(isNull(100.0 * sumMerge(k.sentiment_response_negative_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)),
+        0,
+        100.0 * sumMerge(k.sentiment_response_negative_state) / 
+        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
+    
+    -- Sentiment rate metrics (percentage of messages with positive/negative sentiment)
+    100.0 * sumMerge(k.sentiment_prompt_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_POSITIVE_RATE,
+    100.0 * sumMerge(k.sentiment_prompt_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_NEGATIVE_RATE,
+    100.0 * sumMerge(k.sentiment_response_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_POSITIVE_RATE,
+    100.0 * sumMerge(k.sentiment_response_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_NEGATIVE_RATE,
     
     -- Language metrics
     countMerge(k.lang_prompt_count_state) AS LANG_PROMPT,
