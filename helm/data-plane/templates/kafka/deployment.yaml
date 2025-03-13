@@ -12,12 +12,11 @@ spec:
       labels:
         app: kafka-connect
     spec:
+      imagePullSecrets:
+        {{- toYaml .Values.dataPlane.components.kafka.imagePullSecrets | nindent 10 }}
       containers:
         - name: kafka-connect
           image: confluentinc/cp-server-connect:7.7.0
-          securityContext:
-            runAsUser: 1000
-            runAsNonRoot: true
           ports:
             - containerPort: 8083
           env:
@@ -113,8 +112,6 @@ spec:
           value: "K8 Kafka Cluster"
         - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
           value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
-        - name: KAFKA_CLUSTERS_0_SCHEMAREGISTRY
-          value: "http://schemaregistry:8081"
         imagePullPolicy: Always
         resources:
           requests:
@@ -185,31 +182,4 @@ spec:
           name: connector-scripts
           defaultMode: 0755
       restartPolicy: OnFailure
-      serviceAccountName: create-connectors-sa
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: create-connectors-sa
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: job-reader
-rules:
-- apiGroups: ["batch"]
-  resources: ["jobs"]
-  verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: job-reader-binding
-subjects:
-- kind: ServiceAccount
-  name: create-connectors-sa
-roleRef:
-  kind: Role
-  name: job-reader
-  apiGroup: rbac.authorization.k8s.io
 

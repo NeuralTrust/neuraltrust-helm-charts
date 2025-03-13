@@ -15,7 +15,7 @@ spec:
         app: worker
     spec:
       imagePullSecrets:
-      - name: "gcr-secret"
+        {{- toYaml .Values.dataPlane.components.worker.imagePullSecrets | nindent 10 }}
       containers:
       - name: worker
         image: "{{ .Values.dataPlane.components.worker.image.repository }}:{{ .Values.dataPlane.components.worker.image.tag }}"
