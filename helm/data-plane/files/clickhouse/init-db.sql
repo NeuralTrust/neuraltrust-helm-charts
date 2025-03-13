@@ -353,8 +353,8 @@ SELECT
     uniqMerge(m.conversations_count_state) AS conversations_count,
     -- Calculated metrics
     uniqMerge(m.messages_count_state) / uniqMerge(m.conversations_count_state) as dialogue_volume,
-    -- Improved dialogue time calculation - average of conversation durations in minutes
-    avg(c.TIME_TOTAL) * 60 as dialogue_time_seconds,
+    -- Use the accurate dialogue time from conversations view
+    max(c.TIME_TOTAL) as dialogue_time_seconds,
     -- Get single message rate from dedicated view
     s.single_message_rate,
     avgMerge(m.avg_prompt_words_state) as avg_prompt_words,
@@ -406,7 +406,7 @@ SELECT
 FROM traces_usage_metrics m
 LEFT JOIN single_message_rate_view s ON m.APP_ID = s.APP_ID AND m.EVENT_DATE = s.EVENT_DATE AND m.day = s.day
 LEFT JOIN traces_user_metrics u ON m.APP_ID = u.APP_ID AND m.EVENT_DATE = u.EVENT_DATE AND m.day = u.day
-LEFT JOIN traces_conversations_view c ON m.APP_ID = c.APP_ID AND m.EVENT_DATE = c.EVENT_DATE AND m.day = c.day
+LEFT JOIN traces_conversations_view c ON m.APP_ID = c.APP_ID
 LEFT JOIN apps a ON m.APP_ID = a.id
 GROUP BY m.APP_ID, m.EVENT_DATE, m.day, s.single_message_rate, a.inputCost, a.outputCost;
 
@@ -744,25 +744,14 @@ WHERE TASK = 'message'
 GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000), toStartOfDay(START_TIME);
 
 
--- Create a view for tracking conversation durations across multiple days
-CREATE OR REPLACE VIEW conversation_durations AS
-SELECT
-    APP_ID,
-    CONVERSATION_ID,
-    -- Calculate duration in seconds
-    (max(FIRST_MESSAGE_TIMESTAMP) - min(FIRST_MESSAGE_TIMESTAMP))/1000/60 as TIME_TOTAL,
-FROM traces_conversations
-GROUP BY APP_ID, CONVERSATION_ID;
-
 -- Create a view to read from the materialized view
-CREATE VIEW IF NOT EXISTS traces_conversations_view AS
+CREATE OR REPLACE VIEW traces_conversations_view AS
 SELECT
     APP_ID,
-    EVENT_DATE,
-    day,
     CONVERSATION_ID,
-    FIRST_MESSAGE_TIMESTAMP,
-    LAST_MESSAGE_TIMESTAMP,
+    -- Use minMerge and maxMerge to get the true first and last timestamps
+    minMerge(MIN_START_TIMESTAMP_STATE) as FIRST_MESSAGE_TIMESTAMP,
+    maxMerge(MAX_END_TIMESTAMP_STATE) as LAST_MESSAGE_TIMESTAMP,
     argMaxMerge(USER_ID_STATE) as USER_ID,
     argMaxMerge(SESSION_ID_STATE) as SESSION_ID,
     argMaxMerge(DEVICE_STATE) as DEVICE,
@@ -776,10 +765,10 @@ SELECT
     countMerge(DIALOGUE_VOLUME_STATE) as DIALOGUE_VOLUME,
     if(countMerge(DIALOGUE_VOLUME_STATE) = 1, 1, 0) as ONE_INTERACTION,
     
-    -- Time metrics
-    cd.TIME_TOTAL as TIME_TOTAL,
+    -- Time metrics - calculate directly from the timestamps
+    (maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000 as TIME_TOTAL,
     if(countMerge(DIALOGUE_VOLUME_STATE) > 1, 
-       ((LAST_MESSAGE_TIMESTAMP - FIRST_MESSAGE_TIMESTAMP)/1000)/(countMerge(DIALOGUE_VOLUME_STATE)-1), 
+       ((maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000)/(countMerge(DIALOGUE_VOLUME_STATE)-1), 
        0) as TIME_BETWEEN_INTERACTIONS,
     
     -- Content metrics
@@ -848,15 +837,11 @@ SELECT
     argMinMerge(FIRST_INPUT_STATE) as FIRST_INPUT,
     argMinMerge(FIRST_OUTPUT_STATE) as FIRST_OUTPUT,
     
-    -- Date dimensions for filtering
-    toStartOfHour(fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP)) as EVENT_HOUR,
-    
     -- Add timestamp fields converted to DateTime for easier querying
-    fromUnixTimestamp64Milli(FIRST_MESSAGE_TIMESTAMP) as FIRST_MESSAGE_TIME,
-    fromUnixTimestamp64Milli(LAST_MESSAGE_TIMESTAMP) as LAST_MESSAGE_TIME
+    fromUnixTimestamp64Milli(minMerge(MIN_START_TIMESTAMP_STATE)) as FIRST_MESSAGE_TIME,
+    fromUnixTimestamp64Milli(maxMerge(MAX_END_TIMESTAMP_STATE)) as LAST_MESSAGE_TIME
 FROM traces_conversations
-JOIN conversation_durations cd ON traces_conversations.APP_ID = cd.APP_ID AND traces_conversations.CONVERSATION_ID = cd.CONVERSATION_ID
-GROUP BY APP_ID, day, EVENT_DATE, CONVERSATION_ID, FIRST_MESSAGE_TIMESTAMP, LAST_MESSAGE_TIMESTAMP;
+GROUP BY APP_ID, CONVERSATION_ID;
 
 -- Create a view for classifier analysis with simpler JSON parsing
 CREATE OR REPLACE VIEW classifier_analysis AS
