@@ -14,9 +14,12 @@ spec:
       labels:
         app: trigger
     spec:
+      imagePullSecrets:
+        {{- toYaml .Values.controlPlane.components.trigger.imagePullSecrets | nindent 10 }}
       containers:
       - name: trigger
-        image: ghcr.io/triggerdotdev/trigger.dev:latest
+        image: "{{ .Values.controlPlane.components.trigger.image.repository }}:{{ .Values.controlPlane.components.trigger.image.tag }}"
+        imagePullPolicy: {{ .Values.controlPlane.components.trigger.image.pullPolicy }}
         ports:
         - containerPort: 3030
         env:

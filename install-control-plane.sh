@@ -9,6 +9,54 @@ source scripts/common.sh
 DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="helm/values.yaml"
 
+# Parse command line arguments
+SKIP_INGRESS=false
+SKIP_CERT_MANAGER=false
+NAMESPACE=""
+RELEASE_NAME="control-plane"
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    --skip-ingress)
+      SKIP_INGRESS=true
+      shift
+      ;;
+    --skip-cert-manager)
+      SKIP_CERT_MANAGER=true
+      shift
+      ;;
+    --namespace)
+      NAMESPACE="$2"
+      shift
+      shift
+      ;;
+    --release-name)
+      RELEASE_NAME="$2"
+      shift
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+# If namespace is not provided, use the default
+if [ -z "$NAMESPACE" ]; then
+  NAMESPACE="$DEFAULT_NAMESPACE"
+fi
+
+# Set up additional Helm values based on parameters
+ADDITIONAL_VALUES=""
+if [ "$SKIP_INGRESS" = true ]; then
+  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.ingress.enabled=false"
+fi
+if [ "$SKIP_CERT_MANAGER" = true ]; then
+  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
+fi
+
 verify_environment() {
     local env="${1:-$ENVIRONMENT}"
     if [ -z "$env" ]; then
@@ -206,21 +254,13 @@ check_nginx_ingress_installed() {
     return 1
 }
 
-install_control_plane() {
-    log_info "Installing NeuralTrust Control Plane infrastructure..."
-
-    # Prompt for namespace and create it if it doesn't exist
-    prompt_for_namespace
-    create_namespace_if_not_exists
-
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add jetstack https://charts.jetstack.io
-    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-    helm repo update
-
-    # Replace the existing cert-manager installation check with this
+# Function to install cert-manager if needed
+install_cert_manager() {
+    if [ "$SKIP_CERT_MANAGER" = true ]; then
+        log_info "Skipping cert-manager installation as requested"
+        return 0
+    fi
+    
     if ! check_cert_manager_installed; then
         log_info "Installing cert-manager..."
         helm upgrade --install cert-manager jetstack/cert-manager \
@@ -255,8 +295,15 @@ EOF
     else
         log_info "cert-manager already installed, skipping..."
     fi
+}
 
-    # Replace the existing NGINX Ingress Controller installation check with this
+# Function to install NGINX Ingress Controller if needed
+install_nginx_ingress() {
+    if [ "$SKIP_INGRESS" = true ]; then
+        log_info "Skipping NGINX Ingress Controller installation as requested"
+        return 0
+    }
+    
     if ! check_nginx_ingress_installed; then
         log_info "Installing NGINX Ingress Controller..."
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
@@ -279,13 +326,34 @@ EOF
     else
         log_info "NGINX Ingress Controller already installed, skipping..."
     fi
+}
+
+install_control_plane() {
+    log_info "Installing NeuralTrust Control Plane infrastructure..."
+
+    # Prompt for namespace and create it if it doesn't exist
+    prompt_for_namespace
+    create_namespace_if_not_exists
+
+    # Add required Helm repositories
+    log_info "Adding Helm repositories..."
+    helm repo add bitnami https://charts.bitnami.com/bitnami
+    helm repo add jetstack https://charts.jetstack.io
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+
+    # Install cert-manager if needed
+    install_cert_manager
+
+    # Install NGINX Ingress Controller if needed
+    install_nginx_ingress
 
     # Create required secrets
     create_control_plane_secrets
 
     # Install control plane components
     log_info "Installing control plane..."
-    helm upgrade --install control-plane ./helm/control-plane \
+    helm upgrade --install $RELEASE_NAME ./helm/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
@@ -317,6 +385,7 @@ EOF
         --set dataPlane.components.trigger.postgres.password="$POSTGRES_PASSWORD" \
         --set dataPlane.components.trigger.postgres.host="$POSTGRES_HOST" \
         --set dataPlane.components.trigger.postgres.database="triggerprod" \
+        $ADDITIONAL_VALUES \
         --wait
 
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"

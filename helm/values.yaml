@@ -13,9 +13,15 @@ global:
     clientDataPlaneCidr: ""
     clientVpnCidr: ""
     excludedClientRanges: []
+  ingress:
+    enabled: true
+    controller:
+      enabled: true  # Set to false to skip installing the ingress controller
+  certManager:
+    enabled: true  # Set to false to skip installing cert-manager
 
 cert-manager:
-  enabled: true
+  enabled: ${global.certManager.enabled}
   email: victor.garcia@neuraltrust.ai
   issuer:
     dns01:
@@ -29,6 +35,8 @@ clickhouse:
     repository: "clickhouse/clickhouse-server"
     tag: "latest"
     pullPolicy: "Always"
+    imagePullSecrets:
+      - name: ""
 
 controlPlane:
   enabled: true
@@ -38,6 +46,12 @@ controlPlane:
       magicLinkSecret: "${TRIGGER_MAGIC_LINK_SECRET}"
       sessionSecret: "${TRIGGER_SESSION_SECRET}"
       encryptionKey: "${TRIGGER_ENCRYPTION_KEY}"
+      image:
+        repository: ghcr.io/triggerdotdev/trigger.dev
+        tag: latest
+        pullPolicy: Always
+        imagePullSecrets:
+          - name: ""
       postgres:
         url: "${POSTGRES_URL}"
         user: "${POSTGRES_USER}"
@@ -50,6 +64,8 @@ controlPlane:
         repository: "${API_IMAGE_REPOSITORY}"
         tag: "${API_IMAGE_TAG}"
         pullPolicy: "${API_IMAGE_PULL_POLICY}"
+        imagePullSecrets:
+          - name: gcr-secret
       host: "${CONTROL_PLANE_API_URL}"
       secrets:
         controlPlaneJWTSecret: "${CONTROL_PLANE_JWT_SECRET}"
@@ -67,6 +83,8 @@ controlPlane:
         repository: "${WEBAPP_IMAGE_REPOSITORY}"
         tag: "${WEBAPP_IMAGE_TAG}"
         pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
+        imagePullSecrets:
+          - name: gcr-secret
       host: "${APP_URL}"
       config:
         nodeEnv: production
@@ -106,6 +124,8 @@ dataPlane:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/api
         tag: latest
         pullPolicy: Always
+        imagePullSecrets:
+          - name: gcr-secret
       host: "${CONTROL_PLANE_API_URL}"
       accessMode: ReadWriteOnce
       huggingfaceToken: "${HUGGINGFACE_TOKEN}"
@@ -121,8 +141,12 @@ dataPlane:
       enabled: true
       connect:
         replicas: 1
+        imagePullSecrets:
+          - name: ""
       broker:
         replicas: 1
+        imagePullSecrets:
+          - name: ""
     worker:
       enabled: true
       replicas: 1
@@ -130,6 +154,8 @@ dataPlane:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers
         tag: latest
         pullPolicy: Always
+        imagePullSecrets:
+          - name: gcr-secret
       resources:
         requests:
           memory: 1Gi

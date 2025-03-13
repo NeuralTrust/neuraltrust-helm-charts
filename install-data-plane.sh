@@ -10,6 +10,53 @@ NAMESPACE="neuraltrust"
 DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="helm/values.yaml"
 
+# Parse command line arguments
+SKIP_INGRESS=false
+SKIP_CERT_MANAGER=false
+RELEASE_NAME="data-plane"
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    --skip-ingress)
+      SKIP_INGRESS=true
+      shift
+      ;;
+    --skip-cert-manager)
+      SKIP_CERT_MANAGER=true
+      shift
+      ;;
+    --namespace)
+      NAMESPACE="$2"
+      shift
+      shift
+      ;;
+    --release-name)
+      RELEASE_NAME="$2"
+      shift
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+# If namespace is not provided, use the default
+if [ -z "$NAMESPACE" ]; then
+  NAMESPACE="$DEFAULT_NAMESPACE"
+fi
+
+# Set up additional Helm values based on parameters
+ADDITIONAL_VALUES=""
+if [ "$SKIP_INGRESS" = true ]; then
+  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.ingress.enabled=false"
+fi
+if [ "$SKIP_CERT_MANAGER" = true ]; then
+  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
+fi
+
 verify_environment() {
     local env="${1:-$ENVIRONMENT}"
     if [ -z "$env" ]; then
@@ -196,7 +243,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
     # Install ClickHouse
     # Create ClickHouse configuration to reduce logging and improve performance
-    helm upgrade --install clickhouse bitnami/clickhouse \
+    helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
         --namespace "$NAMESPACE" \
         --set auth.username=neuraltrust \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
@@ -227,40 +274,24 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Install Kafka
-    helm upgrade --install kafka bitnami/kafka \
+    helm upgrade --install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
         --namespace "$NAMESPACE" \
         -f helm/values-kafka.yaml \
         --wait
 }
 
-install_data_plane() {
-    log_info "Installing NeuralTrust Data Plane infrastructure..."
-
-    # Prompt for namespace and create it if it doesn't exist
-    prompt_for_namespace
-    create_namespace_if_not_exists
+install_cert_manager() {
+    if [ "$SKIP_CERT_MANAGER" = true ]; then
+        echo "Skipping cert-manager installation as requested"
+        return 0
+    fi
     
-    # Prompt for API keys
-    prompt_for_openai_api_key
-    prompt_for_huggingface_token
-    
-    # Generate JWT secret
-    generate_jwt_secret
-
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add elastic https://helm.elastic.co
-    helm repo add jetstack https://charts.jetstack.io
-    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-    helm repo update
-
-    # Install cert-manager first
-    log_info "Installing cert-manager..."
+    echo "Installing cert-manager..."
     helm upgrade --install cert-manager jetstack/cert-manager \
         --namespace "$NAMESPACE" \
         --set installCRDs=true \
         --wait
+    
 
     # Wait for cert-manager webhook to be ready
     log_info "Waiting for cert-manager webhook..."
@@ -286,23 +317,57 @@ install_data_plane() {
             ingress:
               class: nginx
 EOF
+}
 
-    # Wait a moment for the ClusterIssuer to be ready
-    sleep 10
-
-    # Install NGINX Ingress Controller
-    log_info "Installing NGINX Ingress Controller..."
+install_ingress_controller() {
+    if [ "$SKIP_INGRESS" = true ]; then
+        echo "Skipping ingress controller installation as requested"
+        return 0
+    fi
+    
+    echo "Installing ingress controller..."
     helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
         --namespace "$NAMESPACE" \
         --set controller.replicaCount=2 \
         --set controller.service.type=LoadBalancer \
         --wait
-
+    
     # Wait for ingress controller to be ready
     log_info "Waiting for ingress controller to be ready..."
     kubectl wait --for=condition=Available deployment/ingress-nginx-controller \
         --namespace "$NAMESPACE" \
         --timeout=120s
+}
+
+install_data_plane() {
+    log_info "Installing NeuralTrust Data Plane infrastructure..."
+
+    # Prompt for namespace and create it if it doesn't exist
+    prompt_for_namespace
+    create_namespace_if_not_exists
+    
+    # Prompt for API keys
+    prompt_for_openai_api_key
+    prompt_for_huggingface_token
+    
+    # Generate JWT secret
+    generate_jwt_secret
+
+    # Add required Helm repositories
+    log_info "Adding Helm repositories..."
+    helm repo add bitnami https://charts.bitnami.com/bitnami
+    helm repo add jetstack https://charts.jetstack.io
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+
+    # Install cert-manager first
+    install_cert_manager
+
+    # Wait a moment for the ClusterIssuer to be ready
+    sleep 10
+
+    # Install ingress controller
+    install_ingress_controller
 
     # Create required secrets
     create_data_plane_secrets
@@ -328,6 +393,7 @@ EOF
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
         --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
+        $ADDITIONAL_VALUES \
         --wait
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"

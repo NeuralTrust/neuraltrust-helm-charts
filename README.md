@@ -161,6 +161,42 @@ The following environment variables are required for installation:
 | `WORKER_IMAGE_TAG` | Docker image tag for the worker |
 | `WORKER_IMAGE_PULL_POLICY` | Image pull policy for worker |
 
+### Installation Options
+
+#### Skip Ingress Resources
+
+If you're using your own ingress controller or don't need ingress resources, you can skip creating them:
+
+```bash
+./install-data-plane.sh --skip-ingress
+```
+
+#### Skip Cert-Manager Installation
+
+If you already have cert-manager installed in your cluster, you can skip installing it again:
+
+```bash
+./install-data-plane.sh --skip-cert-manager
+```
+
+You can combine these options as needed:
+
+```bash
+./install-data-plane.sh --skip-ingress --skip-cert-manager
+```
+
+Alternatively, you can set these options in your values file:
+
+```yaml
+global:
+  ingress:
+    enabled: false
+    controller:
+      enabled: false
+  certManager:
+    enabled: false
+```
+
 ### Installing the Data Plane
 
 ```bash
