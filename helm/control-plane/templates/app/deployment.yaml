@@ -15,32 +15,30 @@ spec:
         app: {{ .Release.Name }}-app
     spec:
       initContainers:
-      - name: init-prisma
+      - name: init-db
         image: "{{ .Values.controlPlane.components.app.image.repository }}:{{ .Values.controlPlane.components.app.image.tag }}"
-        securityContext:
-          runAsUser: 1001
-          runAsGroup: 1001
+        # The image already runs as nextjs user with UID 1001
         command: ["/bin/sh", "-c"]
         args: 
           - |
-            cd /tmp
-            export HOME=/tmp
-            export NODE_PATH=/tmp/node_modules
-            npm install --prefix /tmp prisma
-            cd /app
             # Wait for PostgreSQL to be ready
             echo "Waiting for PostgreSQL..."
-            echo "POSTGRES_HOST: $(POSTGRES_HOST)"
-            echo "POSTGRES_PORT: $(POSTGRES_PORT)"
-            echo "POSTGRES_DATABASE: $(POSTGRES_DATABASE)"
-            echo "POSTGRES_USER: $(POSTGRES_USER)"
-            echo "POSTGRES_PASSWORD: $(POSTGRES_PASSWORD)"
-            echo "POSTGRES_PRISMA_URL: $(POSTGRES_PRISMA_URL)"
-            sleep 10
-            /tmp/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            echo "POSTGRES_HOST: $POSTGRES_HOST"
+            echo "POSTGRES_PORT: $POSTGRES_PORT"
+            echo "POSTGRES_DATABASE: $POSTGRES_DATABASE"
+            
+            # Check if PostgreSQL is ready
+            until nc -z -w 2 $POSTGRES_HOST $POSTGRES_PORT; do
+              echo "Waiting for PostgreSQL to be ready..."
+              sleep 2
+            done
+            
+            echo "PostgreSQL is ready, running database migrations..."
+            # Use npx to run prisma directly
+            npx prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            
+            echo "Database migrations completed successfully"
         env:
-        - name: npm_config_cache
-          value: "/tmp/.npm"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:

@@ -404,7 +404,6 @@ check_prerequisites() {
     
     validate_command "kubectl"
     validate_command "helm"
-    validate_command "yq"
     validate_command "openssl"
 
     # Check if cluster is accessible

@@ -302,7 +302,7 @@ install_nginx_ingress() {
     if [ "$SKIP_INGRESS" = true ]; then
         log_info "Skipping NGINX Ingress Controller installation as requested"
         return 0
-    }
+    fi
     
     if ! check_nginx_ingress_installed; then
         log_info "Installing NGINX Ingress Controller..."
@@ -396,7 +396,6 @@ check_prerequisites() {
     
     validate_command "kubectl"
     validate_command "helm"
-    validate_command "yq"
     validate_command "openssl"
 
     # Check if cluster is accessible
