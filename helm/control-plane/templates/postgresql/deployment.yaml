@@ -45,9 +45,6 @@ spec:
         volumeMounts:
         - name: postgresql-data
           mountPath: /var/lib/postgresql/data
-        - name: postgresql-config
-          mountPath: /etc/postgresql/postgresql.conf
-          subPath: postgresql.conf
         resources:
           {{- toYaml .Values.postgresql.resources | nindent 12 }}
         livenessProbe:
@@ -80,7 +77,4 @@ spec:
         {{- else }}
         emptyDir: {}
         {{- end }}
-      - name: postgresql-config
-        configMap:
-          name: {{ .Release.Name }}-postgresql-config
 {{- end }} 
