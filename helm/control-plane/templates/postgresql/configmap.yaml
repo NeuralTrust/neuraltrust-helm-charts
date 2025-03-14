@@ -1,0 +1,23 @@
+{{- if .Values.global.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-postgresql-config
+  labels:
+    app: {{ .Release.Name }}-postgresql
+data:
+  postgresql.conf: |
+    max_connections = {{ .Values.postgresql.config.max_connections }}
+    shared_buffers = {{ .Values.postgresql.config.shared_buffers }}
+    effective_cache_size = {{ .Values.postgresql.config.effective_cache_size }}
+    maintenance_work_mem = {{ .Values.postgresql.config.maintenance_work_mem }}
+    checkpoint_completion_target = {{ .Values.postgresql.config.checkpoint_completion_target }}
+    wal_buffers = {{ .Values.postgresql.config.wal_buffers }}
+    default_statistics_target = {{ .Values.postgresql.config.default_statistics_target }}
+    random_page_cost = {{ .Values.postgresql.config.random_page_cost }}
+    effective_io_concurrency = {{ .Values.postgresql.config.effective_io_concurrency }}
+    work_mem = {{ .Values.postgresql.config.work_mem }}
+    min_wal_size = {{ .Values.postgresql.config.min_wal_size }}
+    max_wal_size = {{ .Values.postgresql.config.max_wal_size }}
+    listen_addresses = '*'
+{{- end }} 
