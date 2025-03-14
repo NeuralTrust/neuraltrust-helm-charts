@@ -34,8 +34,24 @@ spec:
             done
             
             echo "PostgreSQL is ready, running database migrations..."
-            # Use npx to run prisma directly
-            npx prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            
+            # Set Prisma environment variables to avoid network access
+            export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
+            export PRISMA_GENERATE_SKIP_AUTOINSTALL=true
+            export PRISMA_SKIP_POSTINSTALL_GENERATE=true
+            
+            # Try to find prisma in the image's node_modules
+            if [ -f /app/node_modules/.bin/prisma ]; then
+              echo "Using Prisma from /app/node_modules/.bin/prisma"
+              /app/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            elif [ -f /node_modules/.bin/prisma ]; then
+              echo "Using Prisma from /node_modules/.bin/prisma"
+              /node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            else
+              echo "Prisma CLI not found in node_modules, using npx as fallback"
+              # Use npx with --prefer-offline to avoid network access if possible
+              npx --prefer-offline prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            fi
             
             echo "Database migrations completed successfully"
         env:
@@ -65,6 +81,8 @@ spec:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
         - name: POSTGRES_PRISMA_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+        - name: DATABASE_URL
           value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
