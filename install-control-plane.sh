@@ -12,6 +12,7 @@ VALUES_FILE="helm/values.yaml"
 # Parse command line arguments
 SKIP_INGRESS=false
 SKIP_CERT_MANAGER=false
+INSTALL_POSTGRESQL=false
 NAMESPACE=""
 RELEASE_NAME="control-plane"
 
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-cert-manager)
       SKIP_CERT_MANAGER=true
+      shift
+      ;;
+    --install-postgresql)
+      INSTALL_POSTGRESQL=true
       shift
       ;;
     --namespace)
@@ -55,6 +60,9 @@ if [ "$SKIP_INGRESS" = true ]; then
 fi
 if [ "$SKIP_CERT_MANAGER" = true ]; then
   ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
+fi
+if [ "$INSTALL_POSTGRESQL" = true ]; then
+  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.postgresql.enabled=true"
 fi
 
 verify_environment() {
@@ -144,16 +152,41 @@ create_control_plane_secrets() {
         --from-literal=SESSION_SECRET="$TRIGGER_SESSION_SECRET" \
         --from-literal=ENCRYPTION_KEY="$TRIGGER_ENCRYPTION_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
-
-    # Create the secret for applications to use
-    kubectl create secret generic postgresql-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=POSTGRES_HOST="$POSTGRES_HOST" \
-        --from-literal=POSTGRES_PORT="$POSTGRES_PORT" \
-        --from-literal=POSTGRES_DB="$POSTGRES_DB" \
-        --from-literal=POSTGRES_USER="$POSTGRES_USER" \
-        --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-        --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Create PostgreSQL secrets if needed
+    if [ "$INSTALL_POSTGRESQL" = true ]; then
+        # Generate a random password if not provided
+        if [ -z "$POSTGRES_PASSWORD" ]; then
+            POSTGRES_PASSWORD=$(openssl rand -base64 12)
+            log_info "Generated random PostgreSQL password"
+        fi
+        
+        kubectl create secret generic postgresql-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=POSTGRES_USER="${POSTGRES_USER:-postgres}" \
+            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
+            --from-literal=POSTGRES_HOST="${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}" \
+            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+        log_info "PostgreSQL credentials:"
+        log_info "  Host: ${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}"
+        log_info "  Port: ${POSTGRES_PORT:-5432}"
+        log_info "  Database: ${POSTGRES_DB:-neuraltrust}"
+        log_info "  User: ${POSTGRES_USER:-postgres}"
+        log_info "  Password: $POSTGRES_PASSWORD"
+    else
+        # Create the PostgreSQL secrets from provided environment variables
+        kubectl create secret generic postgresql-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=POSTGRES_HOST="$POSTGRES_HOST" \
+            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
+            --from-literal=POSTGRES_DB="${POSTGRES_DB:-triggerprod}" \
+            --from-literal=POSTGRES_USER="$POSTGRES_USER" \
+            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
     
     # Create OpenAI API key secret
     kubectl create secret generic openai-secrets \

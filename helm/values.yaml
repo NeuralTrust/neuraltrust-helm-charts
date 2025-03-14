@@ -163,3 +163,41 @@ dataPlane:
         limits:
           memory: 4Gi
           cpu: 1000m
+
+postgresql:
+  enabled: ${global.postgresql.enabled}
+  image:
+    repository: "postgres"
+    tag: "15-alpine"
+    pullPolicy: "IfNotPresent"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  securityContext:
+    enabled: true
+    fsGroup: 999
+    runAsUser: 999
+  service:
+    type: ClusterIP
+    port: 5432
+  config:
+    max_connections: 100
+    shared_buffers: 256MB
+    effective_cache_size: 768MB
+    maintenance_work_mem: 64MB
+    checkpoint_completion_target: 0.9
+    wal_buffers: 16MB
+    default_statistics_target: 100
+    random_page_cost: 1.1
+    effective_io_concurrency: 200
+    work_mem: 2621kB
+    min_wal_size: 1GB
+    max_wal_size: 4GB
