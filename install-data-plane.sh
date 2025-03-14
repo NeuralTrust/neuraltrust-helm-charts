@@ -2,11 +2,13 @@
 
 set -e
 
+shopt -s expand_aliases
+
 # Source common functions
 source scripts/common.sh
 
 # Initialize variables
-NAMESPACE="neuraltrust"
+NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="helm/values.yaml"
 
@@ -42,11 +44,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-# If namespace is not provided, use the default
-if [ -z "$NAMESPACE" ]; then
-  NAMESPACE="$DEFAULT_NAMESPACE"
-fi
 
 # Set up additional Helm values based on parameters
 ADDITIONAL_VALUES=""

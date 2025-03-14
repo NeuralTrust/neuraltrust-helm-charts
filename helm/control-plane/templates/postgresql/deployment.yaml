@@ -15,18 +15,12 @@ spec:
       labels:
         app: {{ .Release.Name }}-postgresql
     spec:
-      {{- if .Values.postgresql.securityContext.enabled }}
-      securityContext:
-        fsGroup: {{ .Values.postgresql.securityContext.fsGroup }}
-      {{- end }}
+      imagePullSecrets:
+        {{- toYaml .Values.postgresql.imagePullSecrets | nindent 10 }}
       containers:
       - name: postgresql
         image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
         imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
-        {{- if .Values.postgresql.securityContext.enabled }}
-        securityContext:
-          runAsUser: {{ .Values.postgresql.securityContext.runAsUser }}
-        {{- end }}
         ports:
         - containerPort: 5432
           name: postgresql
