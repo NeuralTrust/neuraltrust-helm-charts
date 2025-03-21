@@ -19,6 +19,9 @@ global:
       enabled: true  # Set to false to skip installing the ingress controller
   certManager:
     enabled: true  # Set to false to skip installing cert-manager
+  resend:
+    apiKey: "${RESEND_API_KEY}"
+    sender: "${RESEND_SENDER}"
 
 cert-manager:
   enabled: ${global.certManager.enabled}
@@ -41,23 +44,19 @@ clickhouse:
 controlPlane:
   enabled: true
   components:
-    trigger:
+    scheduler:
       enabled: true
-      magicLinkSecret: "${TRIGGER_MAGIC_LINK_SECRET}"
-      sessionSecret: "${TRIGGER_SESSION_SECRET}"
-      encryptionKey: "${TRIGGER_ENCRYPTION_KEY}"
+      host: "${CONTROL_PLANE_SCHEDULER_URL}"
       image:
-        repository: ghcr.io/triggerdotdev/trigger.dev
-        tag: latest
-        pullPolicy: Always
+        repository: "${CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY}"
+        tag: "${CONTROL_PLANE_SCHEDULER_IMAGE_TAG}"
+        pullPolicy: "${CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY}"
         imagePullSecrets:
-          - name: ""
-      postgres:
-        url: "${POSTGRES_URL}"
-        user: "${POSTGRES_USER}"
-        password: "${POSTGRES_PASSWORD}"
-        host: "${POSTGRES_HOST}"
-        database: "triggerprod"
+          - name: gcr-secret
+      env:
+        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
+        dataPlaneApiVersion: v1
+        dataPlaneJwtSecret: "${DATA_PLANE_JWT_SECRET}"
     api:
       enabled: true
       image:
@@ -102,12 +101,6 @@ controlPlane:
         oauth:
           clientKey: "${OAUTH_CLIENT_KEY}"
           clientSecret: "${OAUTH_CLIENT_SECRET}"
-        sendgrid:
-          apiKey: "${SENDGRID_API_KEY}"
-          sender: "${SENDER}"
-        trigger:
-          apiKey: "${TRIGGER_API_KEY}"
-          publicApiKey: "${TRIGGER_PUBLIC_API_KEY}"
       resources:
         requests:
           memory: 512Mi
