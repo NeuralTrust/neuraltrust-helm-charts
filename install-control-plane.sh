@@ -142,13 +142,6 @@ create_control_plane_secrets() {
         --namespace "$NAMESPACE" \
         --from-literal=CONTROL_PLANE_JWT_SECRET="$CONTROL_PLANE_JWT_SECRET" \
         --dry-run=client -o yaml | kubectl apply -f -
-
-    kubectl create secret generic trigger-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=MAGIC_LINK_SECRET="$TRIGGER_MAGIC_LINK_SECRET" \
-        --from-literal=SESSION_SECRET="$TRIGGER_SESSION_SECRET" \
-        --from-literal=ENCRYPTION_KEY="$TRIGGER_ENCRYPTION_KEY" \
-        --dry-run=client -o yaml | kubectl apply -f -
     
     # Create PostgreSQL secrets if needed
     if [ "$INSTALL_POSTGRESQL" = true ]; then
@@ -179,7 +172,7 @@ create_control_plane_secrets() {
             --namespace "$NAMESPACE" \
             --from-literal=POSTGRES_HOST="$POSTGRES_HOST" \
             --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
-            --from-literal=POSTGRES_DB="${POSTGRES_DB:-triggerprod}" \
+            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
             --from-literal=POSTGRES_USER="$POSTGRES_USER" \
             --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -403,18 +396,13 @@ install_control_plane() {
         --set controlPlane.components.app.secrets.app.secretKey="$APP_SECRET_KEY" \
         --set controlPlane.components.app.secrets.oauth.clientKey="$OAUTH_CLIENT_KEY" \
         --set controlPlane.components.app.secrets.oauth.clientSecret="$OAUTH_CLIENT_SECRET" \
-        --set controlPlane.components.app.secrets.sendgrid.apiKey="$SENDGRID_API_KEY" \
-        --set controlPlane.components.app.secrets.sendgrid.sender="$SENDER" \
-        --set controlPlane.components.app.secrets.trigger.apiKey="$TRIGGER_API_KEY" \
-        --set controlPlane.components.app.secrets.trigger.publicApiKey="$TRIGGER_PUBLIC_API_KEY" \
-        --set dataPlane.components.trigger.magicLinkSecret="$TRIGGER_MAGIC_LINK_SECRET" \
-        --set dataPlane.components.trigger.sessionSecret="$TRIGGER_SESSION_SECRET" \
-        --set dataPlane.components.trigger.encryptionKey="$TRIGGER_ENCRYPTION_KEY" \
-        --set dataPlane.components.trigger.postgres.url="$POSTGRES_URL" \
-        --set dataPlane.components.trigger.postgres.user="$POSTGRES_USER" \
-        --set dataPlane.components.trigger.postgres.password="$POSTGRES_PASSWORD" \
-        --set dataPlane.components.trigger.postgres.host="$POSTGRES_HOST" \
-        --set dataPlane.components.trigger.postgres.database="triggerprod" \
+        --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
+        --set controlPlane.components.scheduler.image.repository="$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" \
+        --set controlPlane.components.scheduler.image.tag="$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" \
+        --set controlPlane.components.scheduler.image.pullPolicy="$CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY" \
+        --set controlPlane.components.scheduler.host="$CONTROL_PLANE_SCHEDULER_URL" \
+        --set controlPlane.components.global.resend.apiKey="$RESEND_API_KEY" \
+        --set controlPlane.components.global.resend.sender="$RESEND_SENDER" \
         $ADDITIONAL_VALUES \
         --wait
 

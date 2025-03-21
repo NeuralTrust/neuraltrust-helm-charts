@@ -206,6 +206,7 @@ services:
       MAGIC_LINK_SECRET: 15600f1236e568d6c9c400a94e16a4ed
       SESSION_SECRET: 8d92078940c89588fc8b6f5481f2c6e0
       ENCRYPTION_KEY: 1189c93e399856a2a9a1454496171b2e
+      NODE_ENV: development
 
 volumes:
   kafka-data:

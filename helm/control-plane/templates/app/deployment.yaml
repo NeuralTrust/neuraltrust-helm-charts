@@ -159,13 +159,16 @@ spec:
               key: oauth-client-secret
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: "{{ .Values.controlPlane.components.app.config.nodeTlsRejectUnauthorized }}"
-        - name: SENDGRID_API_KEY
+        - name: RESEND_API_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: sendgrid-api-key
-        - name: SENDER
-          value: "{{ .Values.controlPlane.components.app.config.sender }}"
+              key: resend-api-key
+        - name: RESEND_SENDER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: resend-sender
         - name: APP_URL
           value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneAppUrl }}"
         - name: SECRET_KEY
@@ -180,18 +183,6 @@ spec:
               key: OPENAI_API_KEY
         - name: OPENAI_MODEL
           value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
-        - name: TRIGGER_API_URL
-          value: "http://trigger.{{ .Release.Namespace }}.svc.cluster.local:3030"
-        - name: TRIGGER_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: trigger-api-key
-        - name: NEXT_PUBLIC_TRIGGER_PUBLIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: trigger-public-api-key
         - name: CONTROL_PLANE_API_URL
           value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneApiUrl }}"
         - name: CONTROL_PLANE_JWT_SECRET
@@ -206,5 +197,7 @@ spec:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
+        - name: CONTROL_PLANE_SCHEDULER_URL
+          value: "https://{{ .Values.controlPlane.components.scheduler.host }}"
         resources:
           {{- toYaml .Values.controlPlane.components.app.resources | nindent 10 }}
