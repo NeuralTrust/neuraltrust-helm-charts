@@ -5,11 +5,10 @@ metadata:
 spec:
   selector:
     app: kafka-connect
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 8083
       targetPort: 8083
-      nodePort: 30099
 ---
 apiVersion: v1
 kind: Service
@@ -18,9 +17,8 @@ metadata:
 spec:
   selector:
     app: kafka-ui
-  type: NodePort
+  type: ClusterIP
   ports:
     - protocol: TCP
       port: 8080
       targetPort: 8080
-      nodePort: 31006
