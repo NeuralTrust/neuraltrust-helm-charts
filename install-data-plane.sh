@@ -242,6 +242,7 @@ install_databases() {
     # Create ClickHouse configuration to reduce logging and improve performance
     helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
         --namespace "$NAMESPACE" \
+        --set image.tag=25.3.1-debian-12-r0 \
         --set auth.username=neuraltrust \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
         --set shards=1 \
@@ -272,6 +273,7 @@ install_messaging() {
 
     # Install Kafka
     helm upgrade --install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+        --version 31.0.0 \
         --namespace "$NAMESPACE" \
         -f helm/values-kafka.yaml \
         --wait

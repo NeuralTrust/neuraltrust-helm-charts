@@ -143,6 +143,24 @@ ORDER BY (event_hour, app_id, conversation_id, interaction_id)
 TTL event_date + INTERVAL 6 MONTH
 SETTINGS index_granularity = 8192;
 
+CREATE TABLE IF NOT EXISTS firewall
+(
+    team_id String,
+    app_id String,
+    input String,
+    flagged Boolean,
+    category String,
+    probability Float64,
+    latency Int32,
+    created_at DateTime,
+    event_date Date MATERIALIZED toDate(created_at),
+    event_hour DateTime MATERIALIZED toStartOfHour(created_at)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_hour, team_id, app_id)
+TTL event_date + INTERVAL 6 MONTH
+SETTINGS index_granularity = 8192;
+
 -- Processed traces table with KPIs
 CREATE TABLE IF NOT EXISTS traces_processed
 (
