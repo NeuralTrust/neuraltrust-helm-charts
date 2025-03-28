@@ -158,19 +158,6 @@ prompt_for_huggingface_token() {
     fi
 }
 
-# Function to generate JWT secret
-generate_jwt_secret() {
-    if [ -z "$DATA_PLANE_JWT_SECRET" ]; then
-        log_info "Generating JWT secret for Data Plane..."
-        DATA_PLANE_JWT_SECRET=$(openssl rand -hex 32)
-        log_info "JWT secret generated successfully"
-        log_info "JWT Secret: $DATA_PLANE_JWT_SECRET"
-        log_info "Please save this secret in a secure location. You will need it to connect to the Control Plane."
-    else
-        log_info "Using existing JWT secret from environment variables"
-    fi
-}
-
 create_data_plane_secrets() {
     log_info "Creating data plane secrets..."
     
@@ -348,9 +335,6 @@ install_data_plane() {
     # Prompt for API keys
     prompt_for_openai_api_key
     prompt_for_huggingface_token
-    
-    # Generate JWT secret
-    generate_jwt_secret
 
     # Add required Helm repositories
     log_info "Adding Helm repositories..."
