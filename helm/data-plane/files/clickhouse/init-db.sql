@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     scenarioId String,
     appId String,
     testId String,
+    runId String,
     executionId String,
     type String,
     contextKeys Array(String),
