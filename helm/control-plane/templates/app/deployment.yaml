@@ -176,7 +176,7 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: secret-key
-        - name: OPENAI_APIKEY
+        - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: openai-secrets
