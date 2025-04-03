@@ -1,3 +1,4 @@
+clients/
 # Environment files
 .env*
 !.env.example

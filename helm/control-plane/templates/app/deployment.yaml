@@ -164,7 +164,7 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-api-key
-        - name: RESEND_SENDER
+        - name: SENDER
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets

@@ -17,7 +17,7 @@ spec:
         plane: control
     spec:
       imagePullSecrets:
-        {{- toYaml .Values.dataPlane.components.api.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
       containers:
       - name: api
         image: "{{ .Values.dataPlane.components.api.image.repository }}:{{ .Values.dataPlane.components.api.image.tag }}"

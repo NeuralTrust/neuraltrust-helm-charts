@@ -346,11 +346,14 @@ AS SELECT
     
     -- Sample content (first message)
     argMinState(INPUT, START_TIMESTAMP) as FIRST_INPUT_STATE,
-    argMinState(OUTPUT, START_TIMESTAMP) as FIRST_OUTPUT_STATE
+    argMinState(OUTPUT, START_TIMESTAMP) as FIRST_OUTPUT_STATE,
+    
+    -- Store OUTPUT_CLASSIFIERS as array of strings
+    groupArrayState(OUTPUT_CLASSIFIERS) as OUTPUT_CLASSIFIERS_STATE
 FROM traces_processed tp
 JOIN apps a ON tp.APP_ID = a.id
 WHERE TASK = 'message'
-GROUP BY APP_ID, CONVERSATION_ID, toDate(START_TIMESTAMP / 1000), toStartOfDay(START_TIME);
+GROUP BY APP_ID, CONVERSATION_ID, EVENT_DATE, toStartOfDay(START_TIME);
 
 
 -- Create a view to read from the materialized view
@@ -448,7 +451,10 @@ SELECT
     
     -- Add timestamp fields converted to DateTime for easier querying
     fromUnixTimestamp64Milli(minMerge(MIN_START_TIMESTAMP_STATE)) as FIRST_MESSAGE_TIME,
-    fromUnixTimestamp64Milli(maxMerge(MAX_END_TIMESTAMP_STATE)) as LAST_MESSAGE_TIME
+    fromUnixTimestamp64Milli(maxMerge(MAX_END_TIMESTAMP_STATE)) as LAST_MESSAGE_TIME,
+
+    -- Merge OUTPUT_CLASSIFIERS arrays and join them into a JSON array string
+    concat('[', arrayStringConcat(groupArrayMerge(OUTPUT_CLASSIFIERS_STATE), ','), ']') as OUTPUT_CLASSIFIERS
 FROM traces_conversations
 GROUP BY APP_ID, CONVERSATION_ID;
 
@@ -939,8 +945,7 @@ AS SELECT
     sumState(TOKENS_SPENT_RESPONSE) AS cost_response_state,
     
     -- Time metrics
-    maxState(time_diff) AS time_total_state,
-    sumState(LATENCY) AS time_latency_state,
+    avgState(LATENCY) AS time_latency_state,
     
     -- Dialogue time metrics
     minState(START_TIME) AS min_start_time_state,
@@ -949,41 +954,52 @@ AS SELECT
     
     -- Feedback metrics
     countStateIf(1, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
-    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state
+    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state,
+    
+    -- Conversation duration - first calculate per conversation then average
+    avgState(conversation_duration) AS conversation_duration_state
 FROM (
-    SELECT
-        APP_ID,
-        START_TIME,
-        END_TIMESTAMP,
-        CONVERSATION_ID,
-        INTERACTION_ID,
-        SENTIMENT_PROMPT_POSITIVE,
-        SENTIMENT_PROMPT_NEGATIVE,
-        SENTIMENT_PROMPT_NEUTRAL,
-        SENTIMENT_RESPONSE_POSITIVE,
-        SENTIMENT_RESPONSE_NEGATIVE,
-        SENTIMENT_RESPONSE_NEUTRAL,
-        LANG_PROMPT,
-        LANG_RESPONSE,
-        PII_PROMPT,
-        PII_RESPONSE,
-        MALICIOUS_PROMPT,
-        NUM_WORDS_PROMPT,
-        NUM_WORDS_RESPONSE,
-        TOKENS_SPENT_PROMPT,
-        TOKENS_SPENT_RESPONSE,
-        READABILITY_RESPONSE,
-        LATENCY,
-        FEEDBACK_TAG,
-        JSONExtractInt(json, 'ID') AS CLASSIFIER_ID,
-        JSONExtractString(json, 'CATEGORY') AS CATEGORY_ID,
-        JSONExtractString(label) AS LABEL_ID,
-        JSONExtractInt(json, 'SCORE') AS SCORE,
-        toInt64(END_TIMESTAMP) - toInt64(START_TIME) AS time_diff
-    FROM traces_processed
-    ARRAY JOIN JSONExtractArrayRaw(OUTPUT_CLASSIFIERS) AS json
-    ARRAY JOIN JSONExtractArrayRaw(json, 'LABEL') AS label
-    WHERE OUTPUT_CLASSIFIERS IS NOT NULL AND OUTPUT_CLASSIFIERS != '' AND TASK = 'message'
+    -- First get duration per conversation
+    SELECT 
+        *,
+        (max(END_TIMESTAMP) OVER (PARTITION BY APP_ID, CONVERSATION_ID) - 
+         min(START_TIMESTAMP) OVER (PARTITION BY APP_ID, CONVERSATION_ID)) / 1000 / 60 as conversation_duration
+    FROM (
+        SELECT
+            APP_ID,
+            START_TIME,
+            START_TIMESTAMP,
+            END_TIMESTAMP,
+            CONVERSATION_ID,
+            INTERACTION_ID,
+            EVENT_DATE,
+            SENTIMENT_PROMPT_POSITIVE,
+            SENTIMENT_PROMPT_NEGATIVE,
+            SENTIMENT_PROMPT_NEUTRAL,
+            SENTIMENT_RESPONSE_POSITIVE,
+            SENTIMENT_RESPONSE_NEGATIVE,
+            SENTIMENT_RESPONSE_NEUTRAL,
+            LANG_PROMPT,
+            LANG_RESPONSE,
+            PII_PROMPT,
+            PII_RESPONSE,
+            MALICIOUS_PROMPT,
+            NUM_WORDS_PROMPT,
+            NUM_WORDS_RESPONSE,
+            TOKENS_SPENT_PROMPT,
+            TOKENS_SPENT_RESPONSE,
+            READABILITY_RESPONSE,
+            LATENCY,
+            FEEDBACK_TAG,
+            JSONExtractInt(json, 'ID') AS CLASSIFIER_ID,
+            JSONExtractString(json, 'CATEGORY') AS CATEGORY_ID,
+            JSONExtractString(label) AS LABEL_ID,
+            JSONExtractInt(json, 'SCORE') AS SCORE
+        FROM traces_processed
+        ARRAY JOIN JSONExtractArrayRaw(OUTPUT_CLASSIFIERS) AS json
+        ARRAY JOIN JSONExtractArrayRaw(json, 'LABEL') AS label
+        WHERE OUTPUT_CLASSIFIERS IS NOT NULL AND OUTPUT_CLASSIFIERS != '' AND TASK = 'message'
+    )
 )
 GROUP BY day, APP_ID, CLASSIFIER_ID, CATEGORY_ID, LABEL_ID, SCORE;
 
@@ -996,6 +1012,9 @@ SELECT
     k.CATEGORY_ID,
     k.LABEL_ID,
     
+    -- Average conversation duration in minutes for this topic
+    avgMerge(k.conversation_duration_state) AS TIME_TOTAL,
+    
     -- Cost calculation using app costs (default to 0 if NULL)
     sumMerge(k.cost_prompt_state) * if(a.inputCost IS NULL, 0, a.inputCost) + 
     sumMerge(k.cost_response_state) * if(a.outputCost IS NULL, 0, a.outputCost) AS COST,
@@ -1005,7 +1024,7 @@ SELECT
     uniqMerge(k.messages_count_state) AS MESSAGES,
     uniqMerge(k.messages_count_state) / uniqMerge(k.conversations_count_state) AS DIALOGUE_VOLUME,
     
-    -- Sentiment percentages - with default values of 0 instead of NULL
+    -- Sentiment metrics
     if(isNull(100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
         nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)),
         0,
@@ -1030,7 +1049,7 @@ SELECT
         100.0 * sumMerge(k.sentiment_response_negative_state) / 
         nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
     
-    -- Sentiment rate metrics (percentage of messages with positive/negative sentiment)
+    -- Sentiment rate metrics
     100.0 * sumMerge(k.sentiment_prompt_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_POSITIVE_RATE,
     100.0 * sumMerge(k.sentiment_prompt_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_NEGATIVE_RATE,
     100.0 * sumMerge(k.sentiment_response_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_POSITIVE_RATE,
@@ -1059,13 +1078,7 @@ SELECT
     avgMerge(k.readability_response_state) AS READABILITY_RESPONSE,
     
     -- Time metrics
-    maxMerge(k.time_total_state) AS TIME_TOTAL,
-    sumMerge(k.time_latency_state) AS TIME_LATENCY,
-    
-    -- Dialogue time metrics - using simpler calculation
-    if(uniqMerge(k.dialogue_volume_state) > 1,
-        maxMerge(k.time_total_state) / (uniqMerge(k.dialogue_volume_state) - 1), 
-        0) AS TIME_BETWEEN_INTERACTIONS,
+    avgMerge(k.time_latency_state) AS TIME_LATENCY,
     
     -- Feedback metrics
     countMerge(k.feedback_positive_count_state) as FEEDBACK_POSITIVE,
