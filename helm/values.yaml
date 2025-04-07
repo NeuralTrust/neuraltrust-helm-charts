@@ -21,7 +21,8 @@ global:
     enabled: true  # Set to false to skip installing cert-manager
   resend:
     apiKey: "${RESEND_API_KEY}"
-    sender: "${RESEND_SENDER}"
+    alertSender: "${RESEND_ALERT_SENDER}"
+    inviteSender: "${RESEND_INVITE_SENDER}"
 
 cert-manager:
   enabled: ${global.certManager.enabled}
@@ -34,6 +35,9 @@ cert-manager:
 
 clickhouse:
   enabled: true
+  backup:
+    enabled: true
+    gcsBucket: "my-clickhouse-backups"
   image:
     repository: "clickhouse/clickhouse-server"
     tag: "latest"
@@ -151,11 +155,11 @@ dataPlane:
           - name: gcr-secret
       resources:
         requests:
-          memory: 1Gi
-          cpu: 500m
-        limits:
           memory: 4Gi
           cpu: 1000m
+        limits:
+          memory: 8Gi
+          cpu: 2000m
 
 postgresql:
   enabled: ${global.postgresql.enabled}

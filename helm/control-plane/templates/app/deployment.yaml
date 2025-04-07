@@ -168,7 +168,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: resend-sender
+              key: resend-invite-sender
         - name: APP_URL
           value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneAppUrl }}"
         - name: SECRET_KEY

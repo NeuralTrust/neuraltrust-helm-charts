@@ -70,4 +70,4 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: resend-sender
+              key: resend-alert-sender

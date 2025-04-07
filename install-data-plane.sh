@@ -225,8 +225,7 @@ create_data_plane_secrets() {
 install_databases() {
     log_info "Installing databases..."
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
-    # Install ClickHouse
-    # Create ClickHouse configuration to reduce logging and improve performance
+    # Install ClickHouse with backup configuration
     helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
         --namespace "$NAMESPACE" \
         --set image.tag=25.3.1-debian-12-r0 \
@@ -241,7 +240,13 @@ install_databases() {
         --set resources.limits.cpu=4 \
         --set resources.requests.cpu=2 \
         --set logLevel=fatal \
+        --set-file values=helm/data-plane/templates/1.clickhouse/values.yaml \
         --wait
+
+    # Apply backup configuration after ClickHouse is installed
+    kubectl apply -f helm/data-plane/templates/1.clickhouse/patch-resources.yaml
+    kubectl apply -f helm/data-plane/templates/1.clickhouse/patch-job.yaml
+
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
     log_info "Password: $CLICKHOUSE_PASSWORD"
     log_info "Please save this password in a secure location"

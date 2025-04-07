@@ -378,7 +378,7 @@ SELECT
     if(countMerge(DIALOGUE_VOLUME_STATE) = 1, 1, 0) as ONE_INTERACTION,
     
     -- Time metrics - calculate directly from the timestamps
-    (maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000 as TIME_TOTAL,
+    (maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000/60 as TIME_TOTAL,
     if(countMerge(DIALOGUE_VOLUME_STATE) > 1, 
        ((maxMerge(MAX_END_TIMESTAMP_STATE) - minMerge(MIN_START_TIMESTAMP_STATE))/1000)/(countMerge(DIALOGUE_VOLUME_STATE)-1), 
        0) as TIME_BETWEEN_INTERACTIONS,
@@ -479,18 +479,22 @@ AS SELECT
     -- Token metrics
     sumState(TOKENS_SPENT_PROMPT) as prompt_tokens_state,
     sumState(TOKENS_SPENT_RESPONSE) as response_tokens_state,
+    sumState(TOKENS_SPENT_PROMPT * a.inputCost) as prompt_cost_state,
+    sumState(TOKENS_SPENT_RESPONSE * a.outputCost) as response_cost_state,
+    sumState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as total_cost_state,
     avgState(LATENCY) as avg_latency_state,
-    -- Sentiment metrics
-    sumState(SENTIMENT_PROMPT_POSITIVE) as sentiment_prompt_positive_state,
-    sumState(SENTIMENT_PROMPT_NEGATIVE) as sentiment_prompt_negative_state,
-    sumState(SENTIMENT_RESPONSE_POSITIVE) as sentiment_response_positive_state,
-    sumState(SENTIMENT_RESPONSE_NEGATIVE) as sentiment_response_negative_state,
+    -- Fix sentiment metrics to count each message only once for each sentiment type
+    uniqStateIf(INTERACTION_ID, SENTIMENT_PROMPT_POSITIVE > 0.5) as sentiment_prompt_positive_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_PROMPT_NEGATIVE > 0.5) as sentiment_prompt_negative_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_RESPONSE_POSITIVE > 0.5) as sentiment_response_positive_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_RESPONSE_NEGATIVE > 0.5) as sentiment_response_negative_state,
     -- Readability metrics
     avgState(READABILITY_RESPONSE) as readability_response_state,
     -- Feedback metrics
-    countStateIf(1, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
-    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state
+    uniqStateIf(INTERACTION_ID, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
+    uniqStateIf(INTERACTION_ID, FEEDBACK_TAG = 'negative') as feedback_negative_count_state
 FROM traces_processed
+JOIN apps a ON traces_processed.APP_ID = a.id
 WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, day;
 
@@ -579,7 +583,7 @@ SELECT
     -- Use the accurate dialogue time from conversations view
     max(c.TIME_TOTAL) as dialogue_time_seconds,
     -- Get single message rate from dedicated view
-    s.single_message_rate,
+    max(s.single_message_rate) as single_message_rate,
     avgMerge(m.avg_prompt_words_state) as avg_prompt_words,
     avgMerge(m.avg_response_words_state) as avg_response_words,
     -- Token metrics
@@ -592,10 +596,9 @@ SELECT
     if(uniqMerge(m.messages_count_state) > 0,
        sumMerge(m.response_tokens_state) / uniqMerge(m.messages_count_state), 0) as response_tokens_per_message,
     -- Cost calculation
-    sumMerge(m.prompt_tokens_state) * if(a.inputCost IS NULL, 0, a.inputCost) as prompt_cost,
-    sumMerge(m.response_tokens_state) * if(a.outputCost IS NULL, 0, a.outputCost) as response_cost,
-    sumMerge(m.prompt_tokens_state) * if(a.inputCost IS NULL, 0, a.inputCost) + 
-    sumMerge(m.response_tokens_state) * if(a.outputCost IS NULL, 0, a.outputCost) as total_cost,
+    sumMerge(m.prompt_cost_state) as prompt_cost,
+    sumMerge(m.response_cost_state) as response_cost,
+    sumMerge(m.total_cost_state) as total_cost,
     -- User metrics
     uniqMerge(u.users_count_state) as users_count,
     uniqMerge(u.new_users_count_state) as new_users_count,
@@ -607,37 +610,36 @@ SELECT
        0) as sessions_per_user,
     
     -- Sentiment metrics
-    sumMerge(m.sentiment_prompt_positive_state) AS sentiment_prompt_positive,
-    sumMerge(m.sentiment_prompt_negative_state) AS sentiment_prompt_negative,
-    sumMerge(m.sentiment_response_positive_state) AS sentiment_response_positive,
-    sumMerge(m.sentiment_response_negative_state) AS sentiment_response_negative,
+    uniqMerge(m.sentiment_prompt_positive_state) AS sentiment_prompt_positive,
+    uniqMerge(m.sentiment_prompt_negative_state) AS sentiment_prompt_negative,
+    uniqMerge(m.sentiment_response_positive_state) AS sentiment_response_positive,
+    uniqMerge(m.sentiment_response_negative_state) AS sentiment_response_negative,
     
     -- Sentiment rate metrics (percentage of messages with positive/negative sentiment)
-    100.0 * sumMerge(m.sentiment_prompt_positive_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_positive_rate,
-    100.0 * sumMerge(m.sentiment_prompt_negative_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_negative_rate,
-    100.0 * sumMerge(m.sentiment_response_positive_state) / uniqMerge(m.messages_count_state) as sentiment_response_positive_rate,
-    100.0 * sumMerge(m.sentiment_response_negative_state) / uniqMerge(m.messages_count_state) as sentiment_response_negative_rate,
+    100.0 * uniqMerge(m.sentiment_prompt_positive_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_positive_rate,
+    100.0 * uniqMerge(m.sentiment_prompt_negative_state) / uniqMerge(m.messages_count_state) as sentiment_prompt_negative_rate,
+    100.0 * uniqMerge(m.sentiment_response_positive_state) / uniqMerge(m.messages_count_state) as sentiment_response_positive_rate,
+    100.0 * uniqMerge(m.sentiment_response_negative_state) / uniqMerge(m.messages_count_state) as sentiment_response_negative_rate,
     
     -- Readability metrics
     avgMerge(m.readability_response_state) as readability,
     
     -- Feedback metrics
-    countMerge(m.feedback_positive_count_state) as feedback_positive,
-    countMerge(m.feedback_negative_count_state) as feedback_negative,
-    100.0 * countMerge(m.feedback_positive_count_state) / uniqMerge(m.messages_count_state) as feedback_positive_rate,
-    100.0 * countMerge(m.feedback_negative_count_state) / uniqMerge(m.messages_count_state) as feedback_negative_rate
+    uniqMerge(m.feedback_positive_count_state) as feedback_positive,
+    uniqMerge(m.feedback_negative_count_state) as feedback_negative,
+    100.0 * uniqMerge(m.feedback_positive_count_state) / uniqMerge(m.messages_count_state) as feedback_positive_rate,
+    100.0 * uniqMerge(m.feedback_negative_count_state) / uniqMerge(m.messages_count_state) as feedback_negative_rate
 FROM traces_usage_metrics m
 LEFT JOIN single_message_rate_view s ON m.APP_ID = s.APP_ID AND m.EVENT_DATE = s.EVENT_DATE AND m.day = s.day
 LEFT JOIN traces_user_metrics u ON m.APP_ID = u.APP_ID AND m.EVENT_DATE = u.EVENT_DATE AND m.day = u.day
 LEFT JOIN traces_conversations_view c ON m.APP_ID = c.APP_ID
-LEFT JOIN apps a ON m.APP_ID = a.id
-GROUP BY m.APP_ID, m.EVENT_DATE, m.day, s.single_message_rate, a.inputCost, a.outputCost;
+GROUP BY m.APP_ID, m.EVENT_DATE, m.day;
 
 -- Create a view for country metrics
 CREATE OR REPLACE VIEW traces_country_metrics AS
-SELECT
-    APP_ID,
-    EVENT_DATE,
+    SELECT
+        APP_ID,
+        EVENT_DATE,
     toStartOfDay(START_TIME) as day,
     LOCATION as country,
     count() as count
@@ -648,7 +650,7 @@ ORDER BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), count DESC;
 
 -- Update the total metrics view to include READABILITY metrics
 CREATE OR REPLACE VIEW traces_metrics_total AS
-SELECT 
+SELECT
     m.APP_ID,
     sum(m.messages_count) as total_messages,
     sum(m.conversations_count) as total_conversations,
@@ -786,9 +788,9 @@ GROUP BY APP_ID, EVENT_DATE, day, USER_ID;
 
 -- Then create a regular view on top of the materialized view
 CREATE OR REPLACE VIEW traces_engagement_metrics AS
-SELECT
-    APP_ID,
-    EVENT_DATE,
+    SELECT
+        APP_ID,
+        EVENT_DATE,
     day,
     -- User metrics
     uniqExact(USER_ID) as active_users,
@@ -859,41 +861,14 @@ AS SELECT
     sumState(PII_DRIVING_RESPONSE) as pii_driving_response_state,
     
     -- Count of messages with PII
-    countStateIf(1, PII_PROMPT > 0) as pii_prompt_messages_state,
-    countStateIf(1, PII_RESPONSE > 0) as pii_response_messages_state,
+    uniqStateIf(INTERACTION_ID, PII_PROMPT > 0) as pii_prompt_messages_state,
+    uniqStateIf(INTERACTION_ID, PII_RESPONSE > 0) as pii_response_messages_state,
     
     -- Count of messages with malicious content
-    countStateIf(1, MALICIOUS_PROMPT > 0) as malicious_messages_state
+    uniqStateIf(INTERACTION_ID, MALICIOUS_PROMPT > 0) as malicious_messages_state
 FROM traces_processed
 WHERE TASK = 'message'
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
-
--- Create a view for classifier analysis with simpler JSON parsing
-CREATE OR REPLACE VIEW classifier_analysis AS
-SELECT
-    APP_ID,
-    EVENT_DATE,
-    toStartOfDay(START_TIME) as day,
-    CLASSIFIER_ID,
-    CATEGORY_ID,
-    LABEL_ID,
-    SCORE,
-    count() AS count
-FROM (
-    SELECT
-        APP_ID,
-        EVENT_DATE,
-        START_TIME,
-        JSONExtractInt(json, 'ID') AS CLASSIFIER_ID,
-        JSONExtractString(json, 'CATEGORY') AS CATEGORY_ID,
-        JSONExtractString(label) AS LABEL_ID,  -- Extract string value here
-        JSONExtractInt(json, 'SCORE') AS SCORE
-    FROM traces_processed
-    ARRAY JOIN JSONExtractArrayRaw(OUTPUT_CLASSIFIERS) AS json
-    ARRAY JOIN JSONExtractArrayRaw(json, 'LABEL') AS label
-    WHERE OUTPUT_CLASSIFIERS IS NOT NULL AND OUTPUT_CLASSIFIERS != ''
-)
-GROUP BY APP_ID, EVENT_DATE, day, CLASSIFIER_ID, CATEGORY_ID, LABEL_ID, SCORE;
 
 -- Create a materialized view for daily classifier KPIs
 CREATE MATERIALIZED VIEW IF NOT EXISTS kpi_topics_1d
@@ -913,21 +888,21 @@ AS SELECT
     uniqState(INTERACTION_ID) AS messages_count_state,
     
     -- Sentiment metrics
-    sumState(SENTIMENT_PROMPT_POSITIVE) AS sentiment_prompt_positive_state,
-    sumState(SENTIMENT_PROMPT_NEGATIVE) AS sentiment_prompt_negative_state,
-    sumState(SENTIMENT_RESPONSE_POSITIVE) AS sentiment_response_positive_state,
-    sumState(SENTIMENT_RESPONSE_NEGATIVE) AS sentiment_response_negative_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_PROMPT_POSITIVE > 0) AS sentiment_prompt_positive_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_PROMPT_NEGATIVE > 0) AS sentiment_prompt_negative_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_RESPONSE_POSITIVE > 0) AS sentiment_response_positive_state,
+    uniqStateIf(INTERACTION_ID, SENTIMENT_RESPONSE_NEGATIVE > 0) AS sentiment_response_negative_state,
     
     -- Language metrics
     countState(LANG_PROMPT) AS lang_prompt_count_state,
     countState(LANG_RESPONSE) AS lang_response_count_state,
     
     -- PII metrics
-    sumState(PII_PROMPT) AS pii_prompt_state,
-    sumState(PII_RESPONSE) AS pii_response_state,
+    uniqStateIf(INTERACTION_ID, PII_PROMPT > 0) AS pii_prompt_state,
+    uniqStateIf(INTERACTION_ID, PII_RESPONSE > 0) AS pii_response_state,
     
     -- Malicious content metrics
-    sumState(MALICIOUS_PROMPT) AS malicious_prompt_state,
+    uniqStateIf(INTERACTION_ID, MALICIOUS_PROMPT > 0) AS malicious_prompt_state,
     
     -- Word count metrics
     sumState(NUM_WORDS_PROMPT) AS num_words_prompt_state,
@@ -953,8 +928,8 @@ AS SELECT
     uniqState(INTERACTION_ID) AS dialogue_volume_state,
     
     -- Feedback metrics
-    countStateIf(1, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
-    countStateIf(1, FEEDBACK_TAG = 'negative') as feedback_negative_count_state,
+    uniqStateIf(INTERACTION_ID, FEEDBACK_TAG = 'positive') as feedback_positive_count_state,
+    uniqStateIf(INTERACTION_ID, FEEDBACK_TAG = 'negative') as feedback_negative_count_state,
     
     -- Conversation duration - first calculate per conversation then average
     avgState(conversation_duration) AS conversation_duration_state
@@ -1025,46 +1000,46 @@ SELECT
     uniqMerge(k.messages_count_state) / uniqMerge(k.conversations_count_state) AS DIALOGUE_VOLUME,
     
     -- Sentiment metrics
-    if(isNull(100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)),
+    if(isNull(100.0 * uniqMerge(k.sentiment_prompt_positive_state) / 
+        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)),
         0,
-        100.0 * sumMerge(k.sentiment_prompt_positive_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_POSITIVE,
+        100.0 * uniqMerge(k.sentiment_prompt_positive_state) / 
+        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_POSITIVE,
     
-    if(isNull(100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)),
+    if(isNull(100.0 * uniqMerge(k.sentiment_prompt_negative_state) / 
+        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)),
         0,
-        100.0 * sumMerge(k.sentiment_prompt_negative_state) / 
-        nullIf(sumMerge(k.sentiment_prompt_positive_state) + sumMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_NEGATIVE,
+        100.0 * uniqMerge(k.sentiment_prompt_negative_state) / 
+        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_NEGATIVE,
     
-    if(isNull(100.0 * sumMerge(k.sentiment_response_positive_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)),
+    if(isNull(100.0 * uniqMerge(k.sentiment_response_positive_state) / 
+        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)),
         0,
-        100.0 * sumMerge(k.sentiment_response_positive_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_POSITIVE,
+        100.0 * uniqMerge(k.sentiment_response_positive_state) / 
+        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_POSITIVE,
     
-    if(isNull(100.0 * sumMerge(k.sentiment_response_negative_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)),
+    if(isNull(100.0 * uniqMerge(k.sentiment_response_negative_state) / 
+        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)),
         0,
-        100.0 * sumMerge(k.sentiment_response_negative_state) / 
-        nullIf(sumMerge(k.sentiment_response_positive_state) + sumMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
+        100.0 * uniqMerge(k.sentiment_response_negative_state) / 
+        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
     
     -- Sentiment rate metrics
-    100.0 * sumMerge(k.sentiment_prompt_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_POSITIVE_RATE,
-    100.0 * sumMerge(k.sentiment_prompt_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_NEGATIVE_RATE,
-    100.0 * sumMerge(k.sentiment_response_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_POSITIVE_RATE,
-    100.0 * sumMerge(k.sentiment_response_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_NEGATIVE_RATE,
+    100.0 * uniqMerge(k.sentiment_prompt_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_POSITIVE_RATE,
+    100.0 * uniqMerge(k.sentiment_prompt_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_NEGATIVE_RATE,
+    100.0 * uniqMerge(k.sentiment_response_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_POSITIVE_RATE,
+    100.0 * uniqMerge(k.sentiment_response_negative_state) / uniqMerge(k.messages_count_state) as SENTIMENT_RESPONSE_NEGATIVE_RATE,
     
     -- Language metrics
     countMerge(k.lang_prompt_count_state) AS LANG_PROMPT,
     countMerge(k.lang_response_count_state) AS LANG_RESPONSE,
     
     -- PII metrics
-    sumMerge(k.pii_prompt_state) AS PII_PROMPT,
-    sumMerge(k.pii_response_state) AS PII_RESPONSE,
+    uniqMerge(k.pii_prompt_state) AS PII_PROMPT,
+    uniqMerge(k.pii_response_state) AS PII_RESPONSE,
     
     -- Malicious content metrics
-    sumMerge(k.malicious_prompt_state) AS MALICIOUS_PROMPT,
+    uniqMerge(k.malicious_prompt_state) AS MALICIOUS_PROMPT,
     
     -- Word count metrics
     sumMerge(k.num_words_prompt_state) AS NUM_WORDS_PROMPT,
@@ -1081,10 +1056,10 @@ SELECT
     avgMerge(k.time_latency_state) AS TIME_LATENCY,
     
     -- Feedback metrics
-    countMerge(k.feedback_positive_count_state) as FEEDBACK_POSITIVE,
-    countMerge(k.feedback_negative_count_state) as FEEDBACK_NEGATIVE,
-    100.0 * countMerge(k.feedback_positive_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_POSITIVE_RATE,
-    100.0 * countMerge(k.feedback_negative_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_NEGATIVE_RATE
+    uniqMerge(k.feedback_positive_count_state) as FEEDBACK_POSITIVE,
+    uniqMerge(k.feedback_negative_count_state) as FEEDBACK_NEGATIVE,
+    100.0 * uniqMerge(k.feedback_positive_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_POSITIVE_RATE,
+    100.0 * uniqMerge(k.feedback_negative_count_state) / uniqMerge(k.messages_count_state) as FEEDBACK_NEGATIVE_RATE
 FROM kpi_topics_1d k
 LEFT JOIN apps a ON k.APP_ID = a.id
 GROUP BY k.day, k.APP_ID, k.CLASSIFIER_ID, k.CATEGORY_ID, k.LABEL_ID, a.inputCost, a.outputCost;
