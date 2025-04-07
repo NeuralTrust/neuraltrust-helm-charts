@@ -402,7 +402,8 @@ install_control_plane() {
         --set controlPlane.components.scheduler.image.pullPolicy="$CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY" \
         --set controlPlane.components.scheduler.host="$CONTROL_PLANE_SCHEDULER_URL" \
         --set controlPlane.components.global.resend.apiKey="$RESEND_API_KEY" \
-        --set controlPlane.components.global.resend.sender="$RESEND_SENDER" \
+        --set controlPlane.components.global.resend.alertSender="$RESEND_ALERT_SENDER" \
+        --set controlPlane.components.global.resend.inviteSender="$RESEND_INVITE_SENDER" \
         $ADDITIONAL_VALUES \
         --wait
 

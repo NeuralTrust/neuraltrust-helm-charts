@@ -164,11 +164,11 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-api-key
-        - name: RESEND_SENDER
+        - name: SENDER
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: resend-sender
+              key: resend-invite-sender
         - name: APP_URL
           value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneAppUrl }}"
         - name: SECRET_KEY
@@ -176,7 +176,7 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: secret-key
-        - name: OPENAI_APIKEY
+        - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: openai-secrets

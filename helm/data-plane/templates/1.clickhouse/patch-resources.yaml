@@ -1,0 +1,41 @@
+{{- if .Values.clickhouse.backup.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-patch-sa
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-patch-role
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-patch-rolebinding
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-patch-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-patch-sa
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-backup-patch
+  namespace: {{ .Release.Namespace }}
+data:
+  backup-patch.yaml: |
+    [{"op":"add","path":"/spec/template/spec/containers/-","value":{"name":"clickhouse-backup","image":"altinity/clickhouse-backup:2.4.25","imagePullPolicy":"Always","command":["/bin/clickhouse-backup","server"],"env":[{"name":"LOG_LEVEL","value":"debug"},{"name":"ALLOW_EMPTY_BACKUPS","value":"true"},{"name":"API_LISTEN","value":"0.0.0.0:7171"},{"name":"BACKUPS_TO_KEEP_REMOTE","value":"14"},{"name":"REMOTE_STORAGE","value":"gcs"},{"name":"GCS_BUCKET","value":{{ .Values.clickhouse.backup.gcsBucket | quote }}},{"name":"GCS_PATH","value":"backup/shard-{shard}"},{"name":"CLICKHOUSE_SKIP_TABLES","value":"system.*,INFORMATION_SCHEMA.*,default.*"}],"ports":[{"name":"backup-rest","containerPort":7171}],"volumeMounts":[{"mountPath":"/var/lib/clickhouse","name":"data"}]}}]
+{{- end }}
