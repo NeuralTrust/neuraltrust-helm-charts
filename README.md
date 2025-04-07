@@ -33,7 +33,6 @@ The NeuralTrust architecture has specific connectivity requirements:
    - Kafka
    - ClickHouse
    - Worker service
-   - Schema Registry
 
 ### Network Diagram
 
