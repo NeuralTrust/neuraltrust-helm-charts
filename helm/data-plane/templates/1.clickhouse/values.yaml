@@ -1,4 +1,0 @@
-clickhouse:
-  backup:
-    enabled: true
-    gcsBucket: "${CLICKHOUSE_BACKUP_BUCKET}"

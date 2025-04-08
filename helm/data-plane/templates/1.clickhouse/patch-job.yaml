@@ -19,6 +19,8 @@ spec:
             - /bin/sh
             - -c
             - |
+              set -e
+              echo "Applying patch..."
               kubectl patch statefulset clickhouse-shard0 \
                 --patch-file /patches/backup-patch.yaml \
                 --type json \

@@ -240,12 +240,7 @@ install_databases() {
         --set resources.limits.cpu=4 \
         --set resources.requests.cpu=2 \
         --set logLevel=fatal \
-        --set-file values=helm/data-plane/templates/1.clickhouse/values.yaml \
         --wait
-
-    # Apply backup configuration after ClickHouse is installed
-    kubectl apply -f helm/data-plane/templates/1.clickhouse/patch-resources.yaml
-    kubectl apply -f helm/data-plane/templates/1.clickhouse/patch-job.yaml
 
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
     log_info "Password: $CLICKHOUSE_PASSWORD"

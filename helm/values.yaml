@@ -37,7 +37,7 @@ clickhouse:
   enabled: true
   backup:
     enabled: true
-    gcsBucket: "my-clickhouse-backups"
+    gcsBucket: "neuraltrust-clickhouse-backups"
   image:
     repository: "clickhouse/clickhouse-server"
     tag: "latest"
