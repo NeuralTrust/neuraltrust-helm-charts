@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS traces
     channel_id String,
     session_id String,
     user_id String,
+    user_ip String,
     user_email String,
     user_phone String,
     location String,
@@ -184,6 +185,7 @@ CREATE TABLE IF NOT EXISTS traces_processed
     FEEDBACK_TEXT String DEFAULT '',
     CHANNEL_ID String,
     USER_ID String,
+    USER_IP String,
     USER_EMAIL String,
     USER_PHONE String,
     LOCATION String,
@@ -479,6 +481,8 @@ AS SELECT
     -- Token metrics
     sumState(TOKENS_SPENT_PROMPT) as prompt_tokens_state,
     sumState(TOKENS_SPENT_RESPONSE) as response_tokens_state,
+    avgState(TOKENS_SPENT_PROMPT) as avg_prompt_tokens_state,
+    avgState(TOKENS_SPENT_RESPONSE) as avg_response_tokens_state,
     sumState(TOKENS_SPENT_PROMPT * a.inputCost) as prompt_cost_state,
     sumState(TOKENS_SPENT_RESPONSE * a.outputCost) as response_cost_state,
     sumState(TOKENS_SPENT_PROMPT * a.inputCost + TOKENS_SPENT_RESPONSE * a.outputCost) as total_cost_state,
@@ -580,21 +584,18 @@ SELECT
     uniqMerge(m.conversations_count_state) AS conversations_count,
     -- Calculated metrics
     uniqMerge(m.messages_count_state) / uniqMerge(m.conversations_count_state) as dialogue_volume,
-    -- Use the accurate dialogue time from conversations view
-    max(c.TIME_TOTAL) as dialogue_time_seconds,
-    -- Get single message rate from dedicated view
-    max(s.single_message_rate) as single_message_rate,
+    
     avgMerge(m.avg_prompt_words_state) as avg_prompt_words,
     avgMerge(m.avg_response_words_state) as avg_response_words,
     -- Token metrics
     sumMerge(m.prompt_tokens_state) as prompt_tokens,
     sumMerge(m.response_tokens_state) as response_tokens,
-    avgMerge(m.avg_latency_state) as avg_latency,
     -- Tokens per message metrics
-    if(uniqMerge(m.messages_count_state) > 0,
-       sumMerge(m.prompt_tokens_state) / uniqMerge(m.messages_count_state), 0) as prompt_tokens_per_message,
-    if(uniqMerge(m.messages_count_state) > 0,
-       sumMerge(m.response_tokens_state) / uniqMerge(m.messages_count_state), 0) as response_tokens_per_message,
+    avgMerge(m.avg_prompt_tokens_state) as avg_prompt_tokens,
+    avgMerge(m.avg_response_tokens_state) as avg_response_tokens,
+    
+    avgMerge(m.avg_latency_state) as avg_latency,
+
     -- Cost calculation
     sumMerge(m.prompt_cost_state) as prompt_cost,
     sumMerge(m.response_cost_state) as response_cost,
@@ -630,9 +631,7 @@ SELECT
     100.0 * uniqMerge(m.feedback_positive_count_state) / uniqMerge(m.messages_count_state) as feedback_positive_rate,
     100.0 * uniqMerge(m.feedback_negative_count_state) / uniqMerge(m.messages_count_state) as feedback_negative_rate
 FROM traces_usage_metrics m
-LEFT JOIN single_message_rate_view s ON m.APP_ID = s.APP_ID AND m.EVENT_DATE = s.EVENT_DATE AND m.day = s.day
 LEFT JOIN traces_user_metrics u ON m.APP_ID = u.APP_ID AND m.EVENT_DATE = u.EVENT_DATE AND m.day = u.day
-LEFT JOIN traces_conversations_view c ON m.APP_ID = c.APP_ID
 GROUP BY m.APP_ID, m.EVENT_DATE, m.day;
 
 -- Create a view for country metrics

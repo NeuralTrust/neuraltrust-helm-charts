@@ -1,0 +1,34 @@
+{{- if .Values.clickhouse.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickhouse-backup
+spec:
+  schedule: "0 * * * *"  # Run every hour at minute 0
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: curlimages/curl
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  BACKUP_DATE=$(date +%Y-%m-%d-%H-%M-%S)
+                  echo "Starting backup..."
+                  curl -X POST "http://clickhouse:8123" \
+                    -H "X-ClickHouse-User: {{ .Values.clickhouse.auth.username }}" \
+                    -H "X-ClickHouse-Key: $CLICKHOUSE_PASSWORD" \
+                    -d "BACKUP DATABASE neuraltrust TO S3('https://storage.googleapis.com/{{ .Values.clickhouse.backup.gcsBucket }}/$BACKUP_DATE/shard-0', '{{ .Values.clickhouse.backup.gcsAccessKey }}', '{{ .Values.clickhouse.backup.gcsSecretKey }}') ASYNC"
+                  echo "Backup initiated for $BACKUP_DATE"
+              env:
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse
+                      key: admin-password
+          restartPolicy: OnFailure
+{{- end }}
