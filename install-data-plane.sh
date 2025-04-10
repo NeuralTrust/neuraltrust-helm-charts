@@ -225,6 +225,7 @@ create_data_plane_secrets() {
 install_databases() {
     log_info "Installing databases..."
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
+
     # Install ClickHouse with backup configuration
     helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
         --namespace "$NAMESPACE" \
@@ -376,6 +377,9 @@ install_data_plane() {
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
         --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
+        --set clickhouse.backup.gcsBucket="$GCS_BUCKET" \
+        --set clickhouse.backup.gcsAccessKey="$GCS_ACCESS_KEY" \
+        --set clickhouse.backup.gcsSecretKey="$GCS_SECRET_KEY" \
         $ADDITIONAL_VALUES \
         --wait
 

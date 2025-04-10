@@ -37,7 +37,11 @@ clickhouse:
   enabled: true
   backup:
     enabled: true
-    gcsBucket: "neuraltrust-clickhouse-backups"
+    gcsBucket: "${GCS_BUCKET}"
+    gcsAccessKey: "${GCS_ACCESS_KEY}"
+    gcsSecretKey: "${GCS_SECRET_KEY}"
+  auth:
+    username: "neuraltrust"
   image:
     repository: "clickhouse/clickhouse-server"
     tag: "latest"
