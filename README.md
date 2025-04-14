@@ -140,7 +140,7 @@ The following environment variables are required for installation:
 | `OPENAI_API_KEY` | OpenAI API key |
 | `HUGGINGFACE_TOKEN` | HuggingFace token (provided by NeuralTrust) |
 | `GCR_KEY_FILE` | Path to GCR service account key file (provided by NeuralTrust) |
-| `RESEND_API_KEY` | Resend API key |
+| `RESEND_API_KEY` | Resend API key (provided by NeuralTrust) |
 
 ### Data Plane Variables
 
