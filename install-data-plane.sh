@@ -172,6 +172,13 @@ create_data_plane_secrets() {
         --namespace "$NAMESPACE" \
         --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
+    
+
+    # Create Resend API key secret
+    kubectl create secret generic resend-secrets \
+        --namespace "$NAMESPACE" \
+        --from-literal=RESEND_API_KEY="$RESEND_API_KEY" \
+        --dry-run=client -o yaml | kubectl apply -f -
 
     # Create registry credentials secret
     log_info "Please provide your GCR service account key (JSON format)"
