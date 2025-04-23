@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS traces
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_date)
 ORDER BY (event_hour, app_id, conversation_id, interaction_id)
-TTL event_date + INTERVAL 6 MONTH
+TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS firewall
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS firewall
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_date)
 ORDER BY (event_hour, team_id, app_id)
-TTL event_date + INTERVAL 6 MONTH
+TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
 -- Processed traces table with KPIs
@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS traces_processed
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_HOUR, APP_ID, CONVERSATION_ID, INTERACTION_ID)
-TTL EVENT_DATE + INTERVAL 6 MONTH
+TTL EVENT_DATE + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
 -- Create a materialized view with its own storage engine for conversation aggregation

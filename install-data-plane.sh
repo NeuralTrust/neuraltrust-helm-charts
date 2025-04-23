@@ -172,6 +172,13 @@ create_data_plane_secrets() {
         --namespace "$NAMESPACE" \
         --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
+    
+
+    # Create Resend API key secret
+    kubectl create secret generic resend-secrets \
+        --namespace "$NAMESPACE" \
+        --from-literal=RESEND_API_KEY="$RESEND_API_KEY" \
+        --dry-run=client -o yaml | kubectl apply -f -
 
     # Create registry credentials secret
     log_info "Please provide your GCR service account key (JSON format)"
@@ -229,7 +236,7 @@ install_databases() {
     # Install ClickHouse with backup configuration
     helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
         --namespace "$NAMESPACE" \
-        --set image.tag=25.3.1-debian-12-r0 \
+        --version 8.0.10 \
         --set auth.username=neuraltrust \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
         --set shards=1 \

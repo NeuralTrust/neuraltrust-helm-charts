@@ -70,6 +70,11 @@ spec:
               secretKeyRef:
                 name: clickhouse
                 key: admin-password
+          - name: RESEND_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: resend-secrets
+                key: RESEND_API_KEY
         volumeMounts:
           - name: huggingface-cache
             mountPath: "/root/.cache/huggingface"

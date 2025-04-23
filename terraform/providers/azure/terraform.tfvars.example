@@ -1,0 +1,22 @@
+# Resource Group Configuration
+resource_group_name         = "my-aks-resource-group"
+use_existing_resource_group = false
+
+# Network Configuration
+use_existing_vnet           = false
+existing_vnet_name          = ""  # Only needed if use_existing_vnet is true
+existing_vnet_resource_group = "" # Only needed if use_existing_vnet is true
+existing_subnet_name        = ""  # Only needed if use_existing_vnet is true
+
+# Cluster Configuration
+location           = "euwest"
+cluster_name       = "neuraltrust"
+kubernetes_version = "1.24.0"
+node_count         = 3
+node_size          = "Standard_D4s_v3"  # 4 vCPU, 16GB RAM
+
+tags = {
+  Environment = "Production"
+  ManagedBy   = "Terraform"
+  Project     = "NeuralTrust"
+} 
