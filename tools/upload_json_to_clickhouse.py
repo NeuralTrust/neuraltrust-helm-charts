@@ -64,7 +64,7 @@ def main():
     client = Client(
         host="localhost",
         user="neuraltrust",
-        password="9tMWidAH+KpeNl2dLyX5pUNnDzPBptvZ4fJ31Q/Z+mc=", 
+        password="", 
         database="neuraltrust"
     )
     
