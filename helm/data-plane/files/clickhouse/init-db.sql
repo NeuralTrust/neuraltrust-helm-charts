@@ -783,7 +783,7 @@ AS SELECT
     count() as interaction_count
 FROM traces_processed
 WHERE USER_ID != ''
-GROUP BY APP_ID, EVENT_DATE, day, USER_ID;
+GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
 -- Then create a regular view on top of the materialized view
 CREATE OR REPLACE VIEW traces_engagement_metrics AS
