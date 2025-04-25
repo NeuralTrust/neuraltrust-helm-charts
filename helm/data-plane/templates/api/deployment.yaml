@@ -6,6 +6,7 @@ metadata:
     app: api
     plane: control
 spec:
+  {{- /* Validation is now handled by the install script */}}
   replicas: {{ .Values.dataPlane.components.api.replicas }}
   selector:
     matchLabels:
@@ -32,11 +33,22 @@ spec:
               secretKeyRef:
                 name: data-plane-jwt-secret
                 key: DATA_PLANE_JWT_SECRET
-          - name: OPENAI_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: openai-secrets
-                key: OPENAI_API_KEY
+          {{- /* Conditionally add OpenAI API Key env var if the secret name is defined */}}
+          {{- if .Values.dataPlane.secrets.openaiApiKeySecretName }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
+                  key: OPENAI_API_KEY
+          {{- end }}
+          {{- /* Conditionally add Google API Key env var if the secret name is defined */}}
+          {{- if .Values.dataPlane.secrets.googleApiKeySecretName }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+                  key: GOOGLE_API_KEY
+          {{- end }}
           - name: KAFKA_BOOTSTRAP_SERVERS
             value: "kafka:9092"
           - name: HF_HOME
@@ -78,6 +90,11 @@ spec:
         volumeMounts:
           - name: huggingface-cache
             mountPath: "/root/.cache/huggingface"
+          {{- if .Values.dataPlane.components.api.trustTestConfig }}
+          - name: trusttest-config-volume
+            mountPath: /app/.trusttest_config.json # Assuming app runs from /app
+            subPath: .trusttest_config.json
+          {{- end }}
         resources:
           {{- toYaml .Values.dataPlane.components.api.resources | nindent 10 }}
         readinessProbe:
@@ -120,3 +137,8 @@ spec:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: "{{ .Release.Name }}-huggingface-cache"
+      {{- if .Values.dataPlane.components.api.trustTestConfig }}
+      - name: trusttest-config-volume
+        configMap:
+          name: {{ .Release.Name }}-trusttest-config
+      {{- end }}

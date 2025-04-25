@@ -128,16 +128,50 @@ create_namespace_if_not_exists() {
 
 # Function to prompt for OpenAI API key
 prompt_for_openai_api_key() {
-    if [ -z "$OPENAI_API_KEY" ]; then
-        log_info "OpenAI API key not found in environment variables."
-        read -p "Enter your OpenAI API key: " OPENAI_API_KEY
-        
-        if [ -z "$OPENAI_API_KEY" ]; then
-            log_error "OpenAI API key is required."
-            exit 1
-        fi
-    else
+    # Check if already set via environment
+    if [ -n "$OPENAI_API_KEY" ]; then
         log_info "Using OpenAI API key from environment variables."
+        return 0
+    fi
+
+    # Only prompt if interactive
+    if [ -t 0 ]; then
+        log_info "OpenAI API key not found in environment variables."
+        read -p "Enter your OpenAI API key (leave blank if using Google API Key): " OPENAI_API_KEY_INPUT
+        # Export only if a value was entered
+        if [ -n "$OPENAI_API_KEY_INPUT" ]; then
+            export OPENAI_API_KEY="$OPENAI_API_KEY_INPUT"
+            log_info "Using provided OpenAI API key."
+        fi
+    fi
+}
+
+# Function to prompt for Google API key
+prompt_for_google_api_key() {
+    # Check if already set via environment
+    if [ -n "$GOOGLE_API_KEY" ]; then
+        log_info "Using Google API key from environment variables."
+        return 0
+    fi
+
+    # Only prompt if interactive
+    if [ -t 0 ]; then
+        log_info "Google API key not found in environment variables."
+        read -p "Enter your Google API key (leave blank if using OpenAI API Key): " GOOGLE_API_KEY_INPUT
+        # Export only if a value was entered
+        if [ -n "$GOOGLE_API_KEY_INPUT" ]; then
+            export GOOGLE_API_KEY="$GOOGLE_API_KEY_INPUT"
+            log_info "Using provided Google API key."
+        fi
+    fi
+}
+
+# Function to validate that at least one API key is provided
+validate_api_keys() {
+    if [ -z "$OPENAI_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
+        log_error "At least one API key (OpenAI or Google) must be provided."
+        log_error "Set OPENAI_API_KEY or GOOGLE_API_KEY environment variables, or enter them when prompted."
+        exit 1
     fi
 }
 
@@ -167,12 +201,28 @@ create_data_plane_secrets() {
         --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Create OpenAI API key secret
-    kubectl create secret generic openai-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-        --dry-run=client -o yaml | kubectl apply -f -
-    
+    # Create OpenAI API key secret if provided
+    if [ -n "$OPENAI_API_KEY" ]; then
+        # Use the secret name from values.yaml via Helm --set, requires passing it down
+        # For simplicity here, we'll hardcode the default or assume it's passed via env
+        # A better approach might involve 'helm template' + 'kubectl apply' or querying values
+        OPENAI_SECRET_NAME=$(yq e '.dataPlane.secrets.openaiApiKeySecretName' "$VALUES_FILE")
+        log_info "Creating OpenAI secret ($OPENAI_SECRET_NAME)..."
+        kubectl create secret generic "$OPENAI_SECRET_NAME" \
+            --namespace "$NAMESPACE" \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
+
+    # Create Google API key secret if provided
+    if [ -n "$GOOGLE_API_KEY" ]; then
+        GOOGLE_SECRET_NAME=$(yq e '.dataPlane.secrets.googleApiKeySecretName' "$VALUES_FILE")
+        log_info "Creating Google secret ($GOOGLE_SECRET_NAME)..."
+        kubectl create secret generic "$GOOGLE_SECRET_NAME" \
+            --namespace "$NAMESPACE" \
+            --from-literal=GOOGLE_API_KEY="$GOOGLE_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
 
     # Create Resend API key secret
     kubectl create secret generic resend-secrets \
@@ -340,8 +390,10 @@ install_data_plane() {
     prompt_for_namespace
     create_namespace_if_not_exists
     
-    # Prompt for API keys
+    # Prompt for API keys and validate
     prompt_for_openai_api_key
+    prompt_for_google_api_key
+    validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
 
     # Add required Helm repositories
@@ -399,6 +451,7 @@ check_prerequisites() {
     validate_command "kubectl"
     validate_command "helm"
     validate_command "openssl"
+    validate_command "yq" # Added yq dependency for reading values.yaml
 
     # Check if cluster is accessible
     if ! kubectl get nodes &> /dev/null; then

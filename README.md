@@ -94,7 +94,7 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
   - Total cluster resources: 12+ vCPUs, 48+ GB Memory
 - Helm (v3.8+)
 - kubectl configured to access your cluster
-- OpenAI API key
+- OpenAI API key OR Google API key (at least one is required)
 - HuggingFace token (provided by NeuralTrust)
 - Google Container Registry (GCR) service account key (provided by NeuralTrust)
 
@@ -136,7 +136,8 @@ The following environment variables are required for installation:
 |----------|-------------|
 | `ENVIRONMENT` | Environment (dev/prod) |
 | `EMAIL` | Email for Let's Encrypt certificates |
-| `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_API_KEY` | OpenAI API key (Required if `GOOGLE_API_KEY` is not set) |
+| `GOOGLE_API_KEY` | Google API key (Required if `OPENAI_API_KEY` is not set) |
 | `HUGGINGFACE_TOKEN` | HuggingFace token (provided by NeuralTrust) |
 | `GCR_KEY_FILE` | Path to GCR service account key file (provided by NeuralTrust) |
 | `RESEND_API_KEY` | Resend API key (provided by NeuralTrust) |
@@ -211,7 +212,8 @@ export ENVIRONMENT=dev
 
 During installation, you will be prompted for:
 - Namespace (default: neuraltrust)
-- OpenAI API key (if not set in environment)
+- OpenAI API key (if not set in environment and Google API key is not set)
+- Google API key (if not set in environment and OpenAI API key is not set)
 - HuggingFace token (provided by NeuralTrust, if not set in environment)
 - GCR service account key (provided by NeuralTrust)
 
@@ -223,6 +225,7 @@ The script will:
 5. Install ClickHouse database (with 2 shards and 2 replicas)
 6. Install Kafka for messaging
 7. Deploy the Data Plane components
+   - The API component now uses a `.trusttest_config.json` file (configurable via `values.yaml`) to determine which LLM provider (OpenAI or Google) and model to use for specific tasks like evaluation and summarization.
 
 ## Domain Configuration
 
@@ -303,7 +306,7 @@ The Helm charts will detect existing installations and perform an upgrade.
 
 1. **Pod startup failures**: Check pod logs with `kubectl logs -n neuraltrust <pod-name>`
 2. **Database connection issues**: Verify ClickHouse is running with `kubectl get pods -n neuraltrust | grep clickhouse`
-3. **API key errors**: Ensure your OpenAI API key and HuggingFace token are correctly set
+3. **API key errors**: Ensure your OpenAI API key or Google API key are correctly set (at least one is required).
 4. **Ingress issues**: Check ingress status with `kubectl get ingress -n neuraltrust`
 5. **Certificate issues**: Verify certificates with `kubectl get certificates -n neuraltrust`
 6. **Control Plane connection issues**: Ensure your Data Plane API endpoint is accessible from the internet and the JWT token is correct
