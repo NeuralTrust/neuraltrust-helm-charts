@@ -92,13 +92,13 @@ controlPlane:
         pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${APP_URL}"
+      host: "${CONTROL_PLANE_APP_URL}"
+      secondaryHost: "${CONTROL_PLANE_APP_SECONDARY_URL}"
       config:
         nodeEnv: production
         port: 3000
         controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
         dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
-        controlPlaneAppUrl: "${CONTROL_PLANE_APP_URL}"        
         openaiModel: "${OPENAI_MODEL}"
         nodeTlsRejectUnauthorized: "0"
       secrets:
