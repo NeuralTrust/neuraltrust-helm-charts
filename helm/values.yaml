@@ -92,7 +92,6 @@ controlPlane:
         pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${APP_URL}"
       config:
         nodeEnv: production
         port: 3000
