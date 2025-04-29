@@ -19,6 +19,34 @@ NeuralTrust consists of two main components:
 
 > **Important**: The Control Plane is managed by [NeuralTrust](https://neuraltrust.ai) and does not require installation.
 
+## Data Security
+
+### Data Access Model
+
+NeuralTrust implements a strict data access model where:
+
+1. **Data Plane Isolation**
+   - All raw data and processed analytics are stored exclusively within your Data Plane
+   - The Control Plane never stores or processes your data directly
+   - Data remains within your infrastructure and network boundaries
+
+2. **Connection Security**
+   - All external connections use HTTPS with TLS 1.3
+   - Internal cluster communication uses mutual TLS (mTLS)
+   - API endpoints are protected by JWT authentication
+   - All database connections use encrypted protocols
+
+3. **Network Security**
+   - Only the Data Plane API is exposed to the internet
+   - Internal components (Kafka, ClickHouse, Worker) are isolated within the cluster
+   - Firewall rules restrict access to only necessary ports and protocols
+   - Ingress traffic is filtered and validated
+
+4. **Authentication & Authorization**
+   - Control Plane to Data Plane: JWT-based authentication
+   - Client applications: API key authentication
+   - Internal services: Service account authentication
+
 ## Connectivity
 
 ### Network Requirements
@@ -34,53 +62,15 @@ The NeuralTrust architecture has specific connectivity requirements:
    - ClickHouse
    - Worker service
 
-### Network Diagram
-
-```
-Internet
-   │
-   ▼
-┌─────────────────────────────────────────────┐
-│                                             │
-│  Kubernetes Cluster                         │
-│                                             │
-│  ┌─────────────┐        ┌───────────────┐   │
-│  │             │        │               │   │
-│  │ Ingress     │───────▶│ Data Plane    │   │
-│  │ Controller  │        │ API           │   │
-│  │             │        │               │   │
-│  └─────────────┘        └───────┬───────┘   │
-│                                 │           │
-│                                 ▼           │
-│  ┌─────────────┐        ┌───────────────┐   │
-│  │             │        │               │   │
-│  │ Worker      │◀───────│ Kafka         │   │
-│  │ Service     │        │               │   │
-│  │             │        └───────────────┘   │
-│  └──────┬──────┘                            │
-│         │                                   │
-│         ▼                                   │
-│  ┌─────────────┐                            │
-│  │             │                            │
-│  │ ClickHouse  │                            │
-│  │ Database    │                            │
-│  │             │                            │
-│  └─────────────┘                            │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
 ### Firewall Configuration
 
 Ensure your network allows:
 
 1. Inbound HTTPS traffic (port 443) to the Kubernetes ingress controller
-2. Outbound HTTPS traffic (port 443) from the Data Plane API to the Control Plane
 3. Outbound HTTPS traffic (port 443) from the Worker service to external AI services (OpenAI, HuggingFace)
 
 > **Important**: NeuralTrust can provide a specific IP range for the Control Plane to help you implement more restrictive firewall rules. However, you must ensure that:
-> 1. Your client LLM applications can always reach the Data Plane API to send telemetry data
-> 2. The Control Plane can connect to your Data Plane API for management purposes
+> 1. The Control Plane can connect to your Data Plane API for management purposes
 
 > **Note**: All other communication happens within the Kubernetes cluster and doesn't require external network access.
 
@@ -94,7 +84,7 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
   - Total cluster resources: 12+ vCPUs, 48+ GB Memory
 - Helm (v3.8+)
 - kubectl configured to access your cluster
-- OpenAI API key OR Google API key (at least one is required)
+- OpenAI API key or Google API key (at least one is required)
 - HuggingFace token (provided by NeuralTrust)
 - Google Container Registry (GCR) service account key (provided by NeuralTrust)
 
@@ -314,6 +304,7 @@ The Helm charts will detect existing installations and perform an upgrade.
 ### Getting Help
 
 If you encounter issues not covered here, please contact NeuralTrust support at support@neuraltrust.ai.
+
 
 ## License
 
