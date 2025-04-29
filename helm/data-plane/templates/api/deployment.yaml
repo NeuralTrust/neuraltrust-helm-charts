@@ -33,22 +33,20 @@ spec:
               secretKeyRef:
                 name: data-plane-jwt-secret
                 key: DATA_PLANE_JWT_SECRET
-          {{- /* Conditionally add OpenAI API Key env var if the secret name is defined */}}
-          {{- if .Values.dataPlane.secrets.openaiApiKeySecretName }}
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
-                  key: OPENAI_API_KEY
-          {{- end }}
-          {{- /* Conditionally add Google API Key env var if the secret name is defined */}}
-          {{- if .Values.dataPlane.secrets.googleApiKeySecretName }}
-            - name: GOOGLE_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
-                  key: GOOGLE_API_KEY
-          {{- end }}
+        {{- if .Values.dataPlane.secrets.openaiApiKeySecretName }}
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
+                key: OPENAI_API_KEY
+        {{- end }}
+        {{- if .Values.dataPlane.secrets.googleApiKeySecretName }}
+          - name: GOOGLE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+                key: GOOGLE_API_KEY
+        {{- end }}
           - name: KAFKA_BOOTSTRAP_SERVERS
             value: "kafka:9092"
           - name: HF_HOME
