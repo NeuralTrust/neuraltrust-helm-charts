@@ -118,6 +118,11 @@ controlPlane:
           cpu: 500m
 dataPlane:
   enabled: true
+  secrets:
+    # openaiApiKey: "" # Removed: Handled by install script
+    openaiApiKeySecretName: "openai-secrets" # Secret name for OpenAI key
+    # googleApiKey: "" # Removed: Handled by install script
+    googleApiKeySecretName: "google-secrets" # Secret name for Google key
   components:
     api:
       enabled: true
@@ -131,6 +136,23 @@ dataPlane:
       accessMode: ReadWriteOnce
       huggingfaceToken: "${HUGGINGFACE_TOKEN}"
       storage: 10Gi
+      # TrustTest Configuration (.trusttest_config.json)
+      trustTestConfig:
+        evaluator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+        question_generator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.5
+        embeddings:
+          provider: "openai"
+          model: "text-embedding-3-small"
+        topic_summarizer:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
       resources:
         requests:
           cpu: 200m
