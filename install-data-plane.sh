@@ -128,16 +128,50 @@ create_namespace_if_not_exists() {
 
 # Function to prompt for OpenAI API key
 prompt_for_openai_api_key() {
-    if [ -z "$OPENAI_API_KEY" ]; then
-        log_info "OpenAI API key not found in environment variables."
-        read -p "Enter your OpenAI API key: " OPENAI_API_KEY
-        
-        if [ -z "$OPENAI_API_KEY" ]; then
-            log_error "OpenAI API key is required."
-            exit 1
-        fi
-    else
+    # Check if already set via environment
+    if [ -n "$OPENAI_API_KEY" ]; then
         log_info "Using OpenAI API key from environment variables."
+        return 0
+    fi
+
+    # Only prompt if interactive
+    if [ -t 0 ]; then
+        log_info "OpenAI API key not found in environment variables."
+        read -p "Enter your OpenAI API key (leave blank if using Google API Key): " OPENAI_API_KEY_INPUT
+        # Export only if a value was entered
+        if [ -n "$OPENAI_API_KEY_INPUT" ]; then
+            export OPENAI_API_KEY="$OPENAI_API_KEY_INPUT"
+            log_info "Using provided OpenAI API key."
+        fi
+    fi
+}
+
+# Function to prompt for Google API key
+prompt_for_google_api_key() {
+    # Check if already set via environment
+    if [ -n "$GOOGLE_API_KEY" ]; then
+        log_info "Using Google API key from environment variables."
+        return 0
+    fi
+
+    # Only prompt if interactive
+    if [ -t 0 ]; then
+        log_info "Google API key not found in environment variables."
+        read -p "Enter your Google API key (leave blank if using OpenAI API Key): " GOOGLE_API_KEY_INPUT
+        # Export only if a value was entered
+        if [ -n "$GOOGLE_API_KEY_INPUT" ]; then
+            export GOOGLE_API_KEY="$GOOGLE_API_KEY_INPUT"
+            log_info "Using provided Google API key."
+        fi
+    fi
+}
+
+# Function to validate that at least one API key is provided
+validate_api_keys() {
+    if [ -z "$OPENAI_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
+        log_error "At least one API key (OpenAI or Google) must be provided."
+        log_error "Set OPENAI_API_KEY or GOOGLE_API_KEY environment variables, or enter them when prompted."
+        exit 1
     fi
 }
 
@@ -167,12 +201,28 @@ create_data_plane_secrets() {
         --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Create OpenAI API key secret
-    kubectl create secret generic openai-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-        --dry-run=client -o yaml | kubectl apply -f -
-    
+    # Create OpenAI API key secret if provided
+    if [ -n "$OPENAI_API_KEY" ]; then
+        # Use the secret name from values.yaml via Helm --set, requires passing it down
+        # For simplicity here, we'll hardcode the default or assume it's passed via env
+        # A better approach might involve 'helm template' + 'kubectl apply' or querying values
+        OPENAI_SECRET_NAME=$(yq e '.dataPlane.secrets.openaiApiKeySecretName' "$VALUES_FILE")
+        log_info "Creating OpenAI secret ($OPENAI_SECRET_NAME)..."
+        kubectl create secret generic "$OPENAI_SECRET_NAME" \
+            --namespace "$NAMESPACE" \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
+
+    # Create Google API key secret if provided
+    if [ -n "$GOOGLE_API_KEY" ]; then
+        GOOGLE_SECRET_NAME=$(yq e '.dataPlane.secrets.googleApiKeySecretName' "$VALUES_FILE")
+        log_info "Creating Google secret ($GOOGLE_SECRET_NAME)..."
+        kubectl create secret generic "$GOOGLE_SECRET_NAME" \
+            --namespace "$NAMESPACE" \
+            --from-literal=GOOGLE_API_KEY="$GOOGLE_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
 
     # Create Resend API key secret
     kubectl create secret generic resend-secrets \
@@ -274,63 +324,120 @@ install_messaging() {
         --wait
 }
 
-install_cert_manager() {
-    if [ "$SKIP_CERT_MANAGER" = true ]; then
-        echo "Skipping cert-manager installation as requested"
+# Function to check if cert-manager is installed in any namespace
+check_cert_manager_installed() {
+    # Check in common namespaces where cert-manager might be installed
+    if kubectl get deployment -n cert-manager cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in cert-manager namespace"
         return 0
+    elif kubectl get deployment -n kube-system cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in kube-system namespace"
+        return 0
+    elif kubectl get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
+        log_info "cert-manager found in $NAMESPACE namespace"
+        return 0
+    else
+        # Check across all namespaces as a last resort
+        if kubectl get deployment --all-namespaces | grep cert-manager-webhook &> /dev/null; then
+            log_info "cert-manager found in another namespace"
+            return 0
+        fi
     fi
-    
-    echo "Installing cert-manager..."
-    helm upgrade --install cert-manager jetstack/cert-manager \
-        --namespace "$NAMESPACE" \
-        --set installCRDs=true \
-        --wait
-    
-
-    # Wait for cert-manager webhook to be ready
-    log_info "Waiting for cert-manager webhook..."
-    kubectl wait --for=condition=Available deployment/cert-manager-webhook \
-        --namespace "$NAMESPACE" \
-        --timeout=120s
-
-    # Create ClusterIssuer
-    log_info "Creating ClusterIssuer..."
-    kubectl apply -f - <<EOF
-    apiVersion: cert-manager.io/v1
-    kind: ClusterIssuer
-    metadata:
-      name: letsencrypt-prod
-    spec:
-      acme:
-        server: https://acme-v02.api.letsencrypt.org/directory
-        email: ${EMAIL}
-        privateKeySecretRef:
-          name: letsencrypt-prod
-        solvers:
-        - http01:
-            ingress:
-              class: nginx
-EOF
+    return 1
 }
 
-install_ingress_controller() {
-    if [ "$SKIP_INGRESS" = true ]; then
-        echo "Skipping ingress controller installation as requested"
+install_cert_manager() {
+    if [ "$SKIP_CERT_MANAGER" = true ]; then
+        log_info "Skipping cert-manager installation as requested"
         return 0
     fi
     
-    echo "Installing ingress controller..."
-    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-        --namespace "$NAMESPACE" \
-        --set controller.replicaCount=2 \
-        --set controller.service.type=LoadBalancer \
-        --wait
+    if ! check_cert_manager_installed; then
+        log_info "Installing cert-manager..."
+        helm upgrade --install cert-manager jetstack/cert-manager \
+            --namespace "$NAMESPACE" \
+            --set installCRDs=true \
+            --wait
+
+        # Wait for cert-manager webhook to be ready
+        log_info "Waiting for cert-manager webhook..."
+        kubectl wait --for=condition=Available deployment/cert-manager-webhook \
+            --namespace "$NAMESPACE" \
+            --timeout=120s
+
+        # Create ClusterIssuer
+        log_info "Creating ClusterIssuer..."
+        kubectl apply -f - <<EOF
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: letsencrypt-prod
+        spec:
+          acme:
+            server: https://acme-v02.api.letsencrypt.org/directory
+            email: ${EMAIL}
+            privateKeySecretRef:
+              name: letsencrypt-prod
+            solvers:
+            - http01:
+                ingress:
+                  class: nginx
+EOF
+    else
+        log_info "cert-manager already installed, skipping..."
+    fi
+}
+
+check_nginx_ingress_installed() {
+    # Check in common namespaces where NGINX Ingress might be installed
+    if kubectl get deployment -n ingress-nginx ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in ingress-nginx namespace"
+        return 0
+    elif kubectl get deployment -n kube-system ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in kube-system namespace"
+        return 0
+    elif kubectl get deployment -n "$NAMESPACE" ingress-nginx-controller &> /dev/null; then
+        log_info "NGINX Ingress Controller found in $NAMESPACE namespace"
+        return 0
+    else
+        # Check across all namespaces as a last resort
+        if kubectl get deployment --all-namespaces | grep ingress-nginx-controller &> /dev/null; then
+            log_info "NGINX Ingress Controller found in another namespace"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+
+install_nginx_ingress() {
+    if [ "$SKIP_INGRESS" = true ]; then
+        log_info "Skipping NGINX Ingress Controller installation as requested"
+        return 0
+    fi
     
-    # Wait for ingress controller to be ready
-    log_info "Waiting for ingress controller to be ready..."
-    kubectl wait --for=condition=Available deployment/ingress-nginx-controller \
-        --namespace "$NAMESPACE" \
-        --timeout=120s
+    if ! check_nginx_ingress_installed; then
+        log_info "Installing NGINX Ingress Controller..."
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace "$NAMESPACE" \
+            --set controller.replicaCount=2 \
+            --set controller.service.type=LoadBalancer \
+            --set controller.config.proxy-body-size="50m" \
+            --set controller.config.proxy-connect-timeout="600" \
+            --set controller.config.proxy-read-timeout="600" \
+            --set controller.config.proxy-send-timeout="600" \
+            --set controller.config.ssl-protocols="TLSv1.2 TLSv1.3" \
+            --set controller.metrics.enabled=true \
+            --wait
+
+        # Wait for ingress controller to be ready
+        log_info "Waiting for ingress controller to be ready..."
+        kubectl wait --for=condition=Available deployment/ingress-nginx-controller \
+            --namespace "$NAMESPACE" \
+            --timeout=120s
+    else
+        log_info "NGINX Ingress Controller already installed, skipping..."
+    fi
 }
 
 install_data_plane() {
@@ -340,8 +447,10 @@ install_data_plane() {
     prompt_for_namespace
     create_namespace_if_not_exists
     
-    # Prompt for API keys
+    # Prompt for API keys and validate
     prompt_for_openai_api_key
+    prompt_for_google_api_key
+    validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
 
     # Add required Helm repositories
@@ -358,7 +467,7 @@ install_data_plane() {
     sleep 10
 
     # Install ingress controller
-    install_ingress_controller
+    install_nginx_ingress
 
     # Create required secrets
     create_data_plane_secrets
@@ -399,6 +508,7 @@ check_prerequisites() {
     validate_command "kubectl"
     validate_command "helm"
     validate_command "openssl"
+    validate_command "yq" # Added yq dependency for reading values.yaml
 
     # Check if cluster is accessible
     if ! kubectl get nodes &> /dev/null; then

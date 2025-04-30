@@ -385,11 +385,11 @@ install_control_plane() {
         --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \
         --set controlPlane.components.api.image.pullPolicy="$CONTROL_PLANE_API_IMAGE_PULL_POLICY" \
         --set controlPlane.components.app.host="$CONTROL_PLANE_APP_URL" \
+        --set controlPlane.components.app.secondaryHost="$CONTROL_PLANE_APP_SECONDARY_URL" \
         --set controlPlane.components.app.image.repository="$CONTROL_PLANE_APP_IMAGE_REPOSITORY" \
         --set controlPlane.components.app.image.tag="$CONTROL_PLANE_APP_IMAGE_TAG" \
         --set controlPlane.components.app.image.pullPolicy="$CONTROL_PLANE_APP_IMAGE_PULL_POLICY" \
         --set controlPlane.components.app.config.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
-        --set controlPlane.components.app.config.controlPlaneAppUrl="$CONTROL_PLANE_APP_URL" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.app.config.openaiModel="$OPENAI_MODEL" \
         --set controlPlane.components.app.secrets.auth.secret="$CONTROL_PLANE_AUTH_SECRET" \

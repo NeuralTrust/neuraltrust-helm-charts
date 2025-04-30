@@ -35,9 +35,36 @@ spec:
   tls:
     - hosts:
         - {{ .Values.controlPlane.components.app.host | quote }}
+        - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
       secretName: "{{ .Release.Name }}-app-tls"
   rules:
     - host: {{ .Values.controlPlane.components.app.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-app-service
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ .Release.Name }}-app-redirect"
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://{{ .Values.controlPlane.components.app.host }}"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
+      secretName: "{{ .Release.Name }}-app-tls"
+  rules:
+    - host: {{ .Values.controlPlane.components.app.secondaryHost | quote }}
       http:
         paths:
           - path: /

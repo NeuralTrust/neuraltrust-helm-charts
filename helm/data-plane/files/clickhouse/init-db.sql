@@ -654,8 +654,6 @@ SELECT
     sum(m.messages_count) as total_messages,
     sum(m.conversations_count) as total_conversations,
     avg(m.dialogue_volume) as avg_dialogue_volume,
-    avg(m.dialogue_time_seconds) as avg_dialogue_time,
-    avg(m.single_message_rate) as avg_single_message_rate,
     avg(m.avg_prompt_words) as avg_prompt_words,
     avg(m.avg_response_words) as avg_response_words,
     -- Token metrics
