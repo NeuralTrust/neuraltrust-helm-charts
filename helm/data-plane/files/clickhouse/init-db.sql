@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
     failCriteria String,
     testCase String, -- JSON stored as String
     score String,    -- JSON stored as String
-    executionTimeSeconds Int32 NULL,
+    executionTimeSeconds Float32 NULL,
     runAt DateTime DEFAULT now(),
     sign Int8,
     PRIMARY KEY (id)
