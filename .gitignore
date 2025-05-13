@@ -1,0 +1,75 @@
+clients/
+# Environment files
+.env*
+!.env.example
+
+# Credentials
+*.json
+credentials/
+neuraltrust-*.json
+*.key
+*.pem
+*.crt
+*.jks
+*.p12
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Helm
+charts/*/charts
+charts/*/Chart.lock
+*.tgz
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+venv/
+.env/
+.venv/
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars 

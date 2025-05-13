@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Release.Name }}-huggingface-cache"
+spec:
+  accessModes:
+    - "{{ .Values.dataPlane.components.api.accessMode }}"
+  resources:
+    requests:
+      storage: "{{ .Values.dataPlane.components.api.storage }}"
