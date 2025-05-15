@@ -23,6 +23,14 @@ global:
     apiKey: "${RESEND_API_KEY}"
     alertSender: "${RESEND_ALERT_SENDER}"
     inviteSender: "${RESEND_INVITE_SENDER}"
+  clerk:
+    publishableKey: "${CLERK_PUBLISHABLE_KEY}"
+    secretKey: "${CLERK_SECRET_KEY}"
+    webhookSecretSessions: "${CLERK_WEBHOOK_SECRET_SESSIONS}"
+    webhookSecretUsers: "${CLERK_WEBHOOK_SECRET_USERS}"
+    authorizationCallbackUrl: "${CLERK_AUTHORIZATION_CALLBACK_URL}"
+    signInUrl: "${CLERK_SIGN_IN_URL}"
+    signUpUrl: "${CLERK_SIGN_UP_URL}"
 
 cert-manager:
   enabled: ${global.certManager.enabled}
@@ -108,15 +116,6 @@ controlPlane:
         controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
         dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
         openaiModel: "${OPENAI_MODEL}"
-        nodeTlsRejectUnauthorized: "0"
-      secrets:
-        auth:
-          secret: "${AUTH_SECRET}"
-        app:
-          secretKey: "${APP_SECRET_KEY}"
-        oauth:
-          clientKey: "${OAUTH_CLIENT_KEY}"
-          clientSecret: "${OAUTH_CLIENT_SECRET}"
       resources:
         requests:
           memory: 512Mi
