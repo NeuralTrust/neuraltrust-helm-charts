@@ -96,8 +96,6 @@ spec:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
-        - name: CONTROL_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.apiUrl }}"
       imagePullSecrets:
         {{- toYaml .Values.controlPlane.components.app.imagePullSecrets | nindent 10 }}
       containers:
@@ -140,25 +138,6 @@ spec:
               key: POSTGRES_PASSWORD
         - name: POSTGRES_PRISMA_URL
           value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
-        - name: NEXTAUTH_URL
-          value: "https://{{ .Values.controlPlane.components.app.host }}"
-        - name: AUTH_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: auth-secret
-        - name: OAUTH_CLIENT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: oauth-client-key
-        - name: OAUTH_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: oauth-client-secret
-        - name: NODE_TLS_REJECT_UNAUTHORIZED
-          value: "{{ .Values.controlPlane.components.app.config.nodeTlsRejectUnauthorized }}"
         - name: RESEND_API_KEY
           valueFrom:
             secretKeyRef:
@@ -169,13 +148,43 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-invite-sender
-        - name: APP_URL
-          value: "https://{{ .Values.controlPlane.components.app.host }}"
-        - name: SECRET_KEY
+        - name: CLERK_PUBLISHABLE_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: secret-key
+              key: clerk-publishable-key
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-secret-key
+        - name: CLERK_WEBHOOK_SECRET_SESSIONS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-webhook-secret-sessions
+        - name: CLERK_WEBHOOK_SECRET_USERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-webhook-secret-users
+        - name: CLERK_AUTHORIZATION_CALLBACK_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-authorization-callback-url
+        - name: CLERK_SIGN_IN_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-sign-in-url
+        - name: CLERK_SIGN_UP_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-sign-up-url
+        - name: APP_URL
+          value: "https://{{ .Values.controlPlane.components.app.host }}"
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:

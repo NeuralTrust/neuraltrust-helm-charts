@@ -392,10 +392,6 @@ install_control_plane() {
         --set controlPlane.components.app.config.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.app.config.openaiModel="$OPENAI_MODEL" \
-        --set controlPlane.components.app.secrets.auth.secret="$CONTROL_PLANE_AUTH_SECRET" \
-        --set controlPlane.components.app.secrets.app.secretKey="$APP_SECRET_KEY" \
-        --set controlPlane.components.app.secrets.oauth.clientKey="$OAUTH_CLIENT_KEY" \
-        --set controlPlane.components.app.secrets.oauth.clientSecret="$OAUTH_CLIENT_SECRET" \
         --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.scheduler.image.repository="$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" \
         --set controlPlane.components.scheduler.image.tag="$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" \
@@ -404,6 +400,13 @@ install_control_plane() {
         --set controlPlane.components.global.resend.apiKey="$RESEND_API_KEY" \
         --set controlPlane.components.global.resend.alertSender="$RESEND_ALERT_SENDER" \
         --set controlPlane.components.global.resend.inviteSender="$RESEND_INVITE_SENDER" \
+        --set controlPlane.components.global.clerk.publishableKey="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" \
+        --set controlPlane.components.global.clerk.secretKey="$CLERK_SECRET_KEY" \
+        --set controlPlane.components.global.clerk.webhookSecretSessions="$CLERK_WEBHOOK_SECRET_SESSIONS" \
+        --set controlPlane.components.global.clerk.webhookSecretUsers="$CLERK_WEBHOOK_SECRET_USERS" \
+        --set controlPlane.components.global.clerk.authorizationCallbackUrl="$GITHUB_AUTHORIZATION_CALLBACK_URL" \
+        --set controlPlane.components.global.clerk.signInUrl="$NEXT_PUBLIC_CLERK_SIGN_IN_URL" \
+        --set controlPlane.components.global.clerk.signUpUrl="$NEXT_PUBLIC_CLERK_SIGN_UP_URL" \
         $ADDITIONAL_VALUES \
         --wait
 
