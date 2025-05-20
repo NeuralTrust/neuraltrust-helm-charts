@@ -127,6 +127,11 @@ create_namespace_if_not_exists() {
     fi
 }
 
+yaml_to_json() {
+    local yaml_file="$1"
+    python3.12 -c "import yaml, json, sys; print(json.dumps(yaml.safe_load(open('$yaml_file'))))"
+}
+
 # Function to prompt for OpenAI API key
 prompt_for_openai_api_key() {
     # Check if already set via environment
@@ -214,7 +219,7 @@ create_data_plane_secrets() {
         # Use the secret name from values.yaml via Helm --set, requires passing it down
         # For simplicity here, we'll hardcode the default or assume it's passed via env
         # A better approach might involve 'helm template' + 'oc apply' or querying values
-        OPENAI_SECRET_NAME=$(yq e '.dataPlane.secrets.openaiApiKeySecretName' "$VALUES_FILE")
+        OPENAI_SECRET_NAME=$(yaml_to_json "$VALUES_FILE" | jq -r '.dataPlane.secrets.openaiApiKeySecretName')
         log_info "Creating OpenAI secret ($OPENAI_SECRET_NAME)..."
         oc create secret generic "$OPENAI_SECRET_NAME" \
             --namespace "$NAMESPACE" \
@@ -224,7 +229,7 @@ create_data_plane_secrets() {
 
     # Create Google API key secret if provided
     if [ -n "$GOOGLE_API_KEY" ]; then
-        GOOGLE_SECRET_NAME=$(yq e '.dataPlane.secrets.googleApiKeySecretName' "$VALUES_FILE")
+        GOOGLE_SECRET_NAME=$(yaml_to_json "$VALUES_FILE" | jq -r '.dataPlane.secrets.googleApiKeySecretName')
         log_info "Creating Google secret ($GOOGLE_SECRET_NAME)..."
         oc create secret generic "$GOOGLE_SECRET_NAME" \
             --namespace "$NAMESPACE" \
@@ -531,7 +536,7 @@ check_prerequisites() {
     validate_command "oc"
     validate_command "helm"
     validate_command "openssl"
-    validate_command "yq" # Added yq dependency for reading values.yaml
+    #validate_command "yq" # Added yq dependency for reading values.yaml
 
     # Check if cluster is accessible
     if ! oc get pods &> /dev/null; then

@@ -314,7 +314,7 @@ install_databases() {
     
     kubectl create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=helm/data-plane/templates/1.clickhouse/sql-configmap.yaml \
+        --from-file=helm/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | kubectl apply -f -
 }
 
