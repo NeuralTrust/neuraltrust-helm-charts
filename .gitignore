@@ -2,6 +2,7 @@ clients/
 # Environment files
 .env*
 !.env.example
+gcr-keys.json
 
 # Credentials
 *.json

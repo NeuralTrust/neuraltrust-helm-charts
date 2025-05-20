@@ -4,6 +4,7 @@ metadata:
   name: "{{ .Release.Name }}-worker"
   labels:
     app: worker
+    plane: data
 spec:
   replicas: 1
   selector:
@@ -13,7 +14,12 @@ spec:
     metadata:
       labels:
         app: worker
+        plane: data
     spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
+      imagePullSecrets:
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: worker
         image: "{{ .Values.dataPlane.components.worker.image.repository }}:{{ .Values.dataPlane.components.worker.image.tag }}"

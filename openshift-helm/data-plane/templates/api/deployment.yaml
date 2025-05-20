@@ -16,6 +16,10 @@ spec:
         app: api
         plane: data
     spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
+      imagePullSecrets:
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: api
         image: "{{ .Values.dataPlane.components.api.image.repository }}:{{ .Values.dataPlane.components.api.image.tag }}"

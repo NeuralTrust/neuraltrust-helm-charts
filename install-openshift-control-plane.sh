@@ -16,7 +16,7 @@ VALUES_FILE="openshift-helm/values.yaml"
 SKIP_CERT_MANAGER=true
 INSTALL_POSTGRESQL=false
 RELEASE_NAME="control-plane"
-USE_OPENSHIFT_IMAGESTREAM=true # Default to using OpenShift ImageStream
+USE_OPENSHIFT_IMAGESTREAM=false # Default to using OpenShift ImageStream
 
 while [[ $# -gt 0 ]]; do
   key="$1"

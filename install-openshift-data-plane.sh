@@ -13,17 +13,12 @@ DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="openshift-helm/values.yaml"
 
 # Parse command line arguments
-INSTALL_CERT_MANAGER=false # Default for OpenShift, assuming Routes handle certs or manual setup
 RELEASE_NAME="data-plane"
-USE_OPENSHIFT_IMAGESTREAM=true # if false uses GCP image registry
+USE_OPENSHIFT_IMAGESTREAM=false # if false uses GCP image registry
 
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
-    --install-cert-manager) # New flag to explicitly install cert-manager
-      INSTALL_CERT_MANAGER=true
-      shift
-      ;;
     --namespace)
       NAMESPACE="$2"
       shift
@@ -50,10 +45,8 @@ ADDITIONAL_VALUES=""
 # Default for OpenShift: disable chart's Ingress, assume Routes will be used or chart handles it
 ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.ingress.enabled=false"
 
-if [ "$INSTALL_CERT_MANAGER" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=true"
-else
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
+if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set dataPlane.imagePullSecrets=gcr-secret"
 fi
 
 verify_environment() {
@@ -94,7 +87,7 @@ verify_environment() {
     fi
 }
 
-ENV_FILE=".env.data-plane.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.data-plane.${ENVIRONMENT}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
@@ -125,11 +118,6 @@ create_namespace_if_not_exists() {
         log_info "Project $NAMESPACE already exists. Switching to it."
         oc project "$NAMESPACE"
     fi
-}
-
-yaml_to_json() {
-    local yaml_file="$1"
-    python3.12 -c "import yaml, json, sys; print(json.dumps(yaml.safe_load(open('$yaml_file'))))"
 }
 
 # Function to prompt for OpenAI API key
@@ -219,7 +207,7 @@ create_data_plane_secrets() {
         # Use the secret name from values.yaml via Helm --set, requires passing it down
         # For simplicity here, we'll hardcode the default or assume it's passed via env
         # A better approach might involve 'helm template' + 'oc apply' or querying values
-        OPENAI_SECRET_NAME=$(yaml_to_json "$VALUES_FILE" | jq -r '.dataPlane.secrets.openaiApiKeySecretName')
+        OPENAI_SECRET_NAME=$(yq -r '.dataPlane.secrets.openaiApiKeySecretName' "$VALUES_FILE")
         log_info "Creating OpenAI secret ($OPENAI_SECRET_NAME)..."
         oc create secret generic "$OPENAI_SECRET_NAME" \
             --namespace "$NAMESPACE" \
@@ -229,7 +217,7 @@ create_data_plane_secrets() {
 
     # Create Google API key secret if provided
     if [ -n "$GOOGLE_API_KEY" ]; then
-        GOOGLE_SECRET_NAME=$(yaml_to_json "$VALUES_FILE" | jq -r '.dataPlane.secrets.googleApiKeySecretName')
+        GOOGLE_SECRET_NAME=$(yq -r '.dataPlane.secrets.googleApiKeySecretName' "$VALUES_FILE")
         log_info "Creating Google secret ($GOOGLE_SECRET_NAME)..."
         oc create secret generic "$GOOGLE_SECRET_NAME" \
             --namespace "$NAMESPACE" \
@@ -362,95 +350,6 @@ install_messaging() {
         --wait
 }
 
-# Function to check if cert-manager is installed in any namespace
-check_cert_manager_installed() {
-    # Check in common namespaces where cert-manager might be installed
-    if oc get deployment -n cert-manager cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in cert-manager namespace"
-        return 0
-    elif oc get deployment -n kube-system cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in kube-system namespace"
-        return 0
-    elif oc get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in $NAMESPACE namespace"
-        return 0
-    fi
-    # Removed cluster-wide check to avoid permission issues
-    log_info "cert-manager not found in common namespaces (cert-manager, kube-system, $NAMESPACE)."
-    return 1
-}
-
-install_cert_manager() {
-    if [ "$INSTALL_CERT_MANAGER" = false ]; then
-        log_info "Skipping cert-manager installation (default for OpenShift)."
-        log_info "If using OpenShift Routes, manage certificates via Route definition or OpenShift's integrated CA."
-        return 0
-    fi
-    
-    if ! check_cert_manager_installed; then
-        log_info "Installing cert-manager (explicitly requested via --install-cert-manager flag)..."
-        helm upgrade --install cert-manager jetstack/cert-manager \
-            --namespace "$NAMESPACE" \
-            --set installCRDs=true \
-            --wait
-
-        # Wait for cert-manager webhook to be ready
-        log_info "Waiting for cert-manager webhook..."
-        oc wait --for=condition=Available deployment/cert-manager-webhook \
-            --namespace "$NAMESPACE" \
-            --timeout=120s
-
-        # Create ClusterIssuer only if NGINX controller is also being installed,
-        # as the default ClusterIssuer is for NGINX.
-        # if [ "$INSTALL_NGINX_CONTROLLER" = true ]; then
-        #     log_info "Creating ClusterIssuer for NGINX Ingress..."
-        #     oc apply -f - <<EOF
-        #     apiVersion: cert-manager.io/v1
-        #     kind: ClusterIssuer
-        #     metadata:
-        #       name: letsencrypt-prod
-        #     spec:
-        #       acme:
-        #         server: https://acme-v02.api.letsencrypt.org/directory
-        #         email: ${EMAIL} # Make sure EMAIL env var is set
-        #         privateKeySecretRef:
-        #           name: letsencrypt-prod
-        #         solvers:
-        #         - http01:
-        #             ingress:
-        #               class: nginx
-# EOF
-        # else
-        log_info "Skipping NGINX-specific ClusterIssuer creation."
-        log_info "If using cert-manager with OpenShift Routes, configure a suitable ClusterIssuer manually."
-        # fi
-    else
-        log_info "cert-manager already installed, skipping its installation script."
-        # Even if already installed, check if we need to create our specific ClusterIssuer
-        # if [ "$INSTALL_NGINX_CONTROLLER" = true ]; then
-        #     log_info "Checking/Creating ClusterIssuer for NGINX Ingress (since cert-manager is present and NGINX controller is requested)..."
-        #     # A more robust check would be to see if 'letsencrypt-prod' ClusterIssuer already exists
-        #     # For now, we'll re-apply; kubectl apply is idempotent.
-        #     oc apply -f - <<EOF
-        #     apiVersion: cert-manager.io/v1
-        #     kind: ClusterIssuer
-        #     metadata:
-        #       name: letsencrypt-prod
-        #     spec:
-        #       acme:
-        #         server: https://acme-v02.api.letsencrypt.org/directory
-        #         email: ${EMAIL} # Make sure EMAIL env var is set
-        #         privateKeySecretRef:
-        #           name: letsencrypt-prod
-        #         solvers:
-        #         - http01:
-        #             ingress:
-        #               class: nginx
-# EOF
-        # fi
-    fi
-}
-
 # Function to install data plane components
 install_data_plane() {
     log_info "Installing NeuralTrust Data Plane infrastructure..."
@@ -472,12 +371,8 @@ install_data_plane() {
     # Add required Helm repositories
     log_info "Adding Helm repositories..."
     helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add jetstack https://charts.jetstack.io
     # helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
     helm repo update
-
-    # Install cert-manager first
-    install_cert_manager
 
     # Wait a moment for the ClusterIssuer to be ready
     sleep 10
@@ -506,7 +401,7 @@ install_data_plane() {
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
-        --set dataPlane.components.api.host=$FINAL_DATA_PLANE_API_URL\
+        --set dataPlane.components.api.host=$FINAL_DATA_PLANE_API_URL \
         --set dataPlane.components.api.image.repository="$DATA_PLANE_API_IMAGE_REPOSITORY" \
         --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
         --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
@@ -536,7 +431,7 @@ check_prerequisites() {
     validate_command "oc"
     validate_command "helm"
     validate_command "openssl"
-    #validate_command "yq" # Added yq dependency for reading values.yaml
+    validate_command "yq"
 
     # Check if cluster is accessible
     if ! oc get pods &> /dev/null; then

@@ -1,3 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ .Release.Name }}-api-route"
+spec:
+  host: "{{ .Values.dataPlane.components.api.host }}"
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: "{{ .Release.Name }}-api-service"
+    weight: 100
+  port:
+    targetPort: http
+  path: "/"
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -12,19 +28,3 @@ spec:
       name: http
   selector:
     app: api
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: "{{ .Release.Name }}-api-route"
-spec:
-  host: "{{ .Values.dataPlane.components.api.host | quote }}"
-  tls:
-    termination: edge
-  to:
-    kind: Service
-    name: "{{ .Release.Name }}-api-service"
-    weight: 100
-  port:
-    targetPort: http
-  path: "/"
