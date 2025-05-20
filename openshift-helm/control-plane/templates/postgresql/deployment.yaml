@@ -20,6 +20,14 @@ spec:
       containers:
       - name: postgresql
         image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
         imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
         ports:
         - containerPort: 5432

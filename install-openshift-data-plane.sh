@@ -74,8 +74,6 @@ verify_environment() {
 
     # Ask for confirmation
     log_warn "You are about to install NeuralTrust Data Plane in ${env} environment"
-    log_warn "This will affect the following domains:"
-    log_warn "- API: $(grep API_DOMAIN .env.$env | cut -d= -f2)"
     
     read -p "Are you sure you want to continue? (yes/no) " -r
     echo

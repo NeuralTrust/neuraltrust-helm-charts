@@ -139,6 +139,7 @@ create_control_plane_secrets() {
     
     # Create PostgreSQL secrets if needed
     if [ "$INSTALL_POSTGRESQL" = true ]; then
+        log_info "Installing PostgreSQL in $NAMESPACE namespace..."
         # Generate a random password if not provided
         if [ -z "$POSTGRES_PASSWORD" ]; then
             POSTGRES_PASSWORD=$(openssl rand -base64 12)
@@ -150,17 +151,18 @@ create_control_plane_secrets() {
             --from-literal=POSTGRES_USER="${POSTGRES_USER:-postgres}" \
             --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
             --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
-            --from-literal=POSTGRES_HOST="${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}" \
+            --from-literal=POSTGRES_HOST="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local" \
             --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
             --dry-run=client -o yaml | oc apply -f -
             
         log_info "PostgreSQL credentials:"
-        log_info "  Host: ${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}"
+        log_info "  Host: ${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
         log_info "  Port: ${POSTGRES_PORT:-5432}"
         log_info "  Database: ${POSTGRES_DB:-neuraltrust}"
         log_info "  User: ${POSTGRES_USER:-postgres}"
         log_info "  Password: $POSTGRES_PASSWORD"
     else
+        log_info "Skipping PostgreSQL installation as requested"
         # Create the PostgreSQL secrets from provided environment variables
         oc create secret generic postgresql-secrets \
             --namespace "$NAMESPACE" \
