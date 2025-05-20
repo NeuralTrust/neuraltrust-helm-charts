@@ -196,40 +196,8 @@ create_data_plane_secrets() {
         log_info "Generated DATA_PLANE_JWT_SECRET. Please store this securely if needed for direct API access or debugging."
     fi
     
-    # Create JWT secret
-    oc create secret generic data-plane-jwt-secret \
-        --namespace "$NAMESPACE" \
-        --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
-        --dry-run=client -o yaml | oc apply -f -
-
-    # Create OpenAI API key secret if provided
-    if [ -n "$OPENAI_API_KEY" ]; then
-        # Use the secret name from values.yaml via Helm --set, requires passing it down
-        # For simplicity here, we'll hardcode the default or assume it's passed via env
-        # A better approach might involve 'helm template' + 'oc apply' or querying values
-        OPENAI_SECRET_NAME=$(yq -r '.dataPlane.secrets.openaiApiKeySecretName' "$VALUES_FILE")
-        log_info "Creating OpenAI secret ($OPENAI_SECRET_NAME)..."
-        oc create secret generic "$OPENAI_SECRET_NAME" \
-            --namespace "$NAMESPACE" \
-            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-            --dry-run=client -o yaml | oc apply -f -
-    fi
-
-    # Create Google API key secret if provided
-    if [ -n "$GOOGLE_API_KEY" ]; then
-        GOOGLE_SECRET_NAME=$(yq -r '.dataPlane.secrets.googleApiKeySecretName' "$VALUES_FILE")
-        log_info "Creating Google secret ($GOOGLE_SECRET_NAME)..."
-        oc create secret generic "$GOOGLE_SECRET_NAME" \
-            --namespace "$NAMESPACE" \
-            --from-literal=GOOGLE_API_KEY="$GOOGLE_API_KEY" \
-            --dry-run=client -o yaml | oc apply -f -
-    fi
-
-    # Create Resend API key secret
-    oc create secret generic resend-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=RESEND_API_KEY="$RESEND_API_KEY" \
-        --dry-run=client -o yaml | oc apply -f -
+    # Secrets are now created by Helm chart based on values passed.
+    # Ensure OPENAI_API_KEY, GOOGLE_API_KEY, RESEND_API_KEY, and DATA_PLANE_JWT_SECRET are available as shell variables.
 
     if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
         # Create registry credentials secret
@@ -397,6 +365,12 @@ install_data_plane() {
         FINAL_DATA_PLANE_API_URL=$DATA_PLANE_API_URL
     fi
 
+    # Define default secret names, users can override these via VALUES_FILE or --set
+    OPENAI_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-openai-api-key"
+    GOOGLE_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-google-api-key"
+    DATA_PLANE_JWT_SECRET_NAME_DEFAULT="$RELEASE_NAME-data-plane-jwt-secret"
+    RESEND_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-resend-secrets"
+
     helm upgrade --install data-plane ./openshift-helm/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
@@ -406,7 +380,14 @@ install_data_plane() {
         --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
         --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
-        --set dataPlane.components.api.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
+        --set dataPlane.secrets.dataPlaneJWTSecretName="${DATA_PLANE_JWT_SECRET_NAME:-$DATA_PLANE_JWT_SECRET_NAME_DEFAULT}" \
+        --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
+        --set dataPlane.secrets.openaiApiKeySecretName="${OPENAI_API_KEY_SECRET_NAME:-$OPENAI_API_KEY_SECRET_NAME_DEFAULT}" \
+        --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
+        --set dataPlane.secrets.googleApiKeySecretName="${GOOGLE_API_KEY_SECRET_NAME:-$GOOGLE_API_KEY_SECRET_NAME_DEFAULT}" \
+        --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
+        --set dataPlane.secrets.resendApiKeySecretName="${RESEND_API_KEY_SECRET_NAME:-$RESEND_API_KEY_SECRET_NAME_DEFAULT}" \
+        --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
         --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
@@ -431,7 +412,11 @@ check_prerequisites() {
     validate_command "oc"
     validate_command "helm"
     validate_command "openssl"
-    validate_command "yq"
+    # validate_command "yq" # yq is no longer a prerequisite
+
+    # Check if jq is installed, as it's used for GCR key validation and potentially other tasks
+    validate_command "jq"
+
 
     # Check if cluster is accessible
     if ! oc get pods &> /dev/null; then
