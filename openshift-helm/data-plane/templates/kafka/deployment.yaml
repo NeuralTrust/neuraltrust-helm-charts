@@ -1,0 +1,185 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+spec:
+  replicas: {{ .Values.dataPlane.components.kafka.connect.replicas }}
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.dataPlane.components.kafka.imagePullSecrets | nindent 10 }}
+      containers:
+        - name: kafka-connect
+          image: {{ .Values.global.kafka.connect.image | quote }}
+          ports:
+            - containerPort: 8083
+          env:
+            - name: CONNECT_ERRORS_TOLERANCE
+              value: "all"
+            - name: CONNECT_ERRORS_RETRY_TIMEOUT
+              value: "60"
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
+            - name: CONNECT_GROUP_ID
+              value: "connect-cluster"
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: "connect-configs"
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: "connect-offsets"
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: "connect-status"
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: CONNECT_KEY_CONVERTER
+              value: "org.apache.kafka.connect.storage.StringConverter"
+            - name: CONNECT_VALUE_CONVERTER
+              value: "org.apache.kafka.connect.json.JsonConverter"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: CONNECT_PLUGIN_PATH
+              value: "/usr/share/java,/usr/share/confluent-hub-components,/usr/share/filestream-connectors"
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CONNECT_LOG4J_ROOT_LOGLEVEL
+              value: "ERROR"
+            - name: CONNECT_LOG4J_LOGGERS
+              value: "org.apache.zookeeper=INFO,org.I0Itec.zkclient=INFO,org.reflections=INFO"
+            - name: CONNECT_CONSUMER_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: CONNECT_CONSUMER_OFFSETS_TOPIC_NUM_PARTITIONS
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: CONNECT_INTERNAL_REPLICATION_FACTOR
+              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+            - name: KAFKA_NUM_PARTITIONS
+              value: "3"
+            - name: CONNECT_PRODUCER_DEFAULT_PARTITIONS
+              value: "3"
+            - name: CONNECT_CONSUMER_DEFAULT_PARTITIONS
+              value: "3"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 1000m
+              memory: 4Gi
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "Installing Kafka Connect plugins..."
+                  confluent-hub install --no-prompt clickhouse/clickhouse-kafka-connect:latest
+                  confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest
+                  confluent-hub install --no-prompt confluentinc/connect-transforms:latest
+                  ls -la /usr/share/confluent-hub-components
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  labels:
+    app: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+      - name: kafka-ui
+        image: {{ .Values.global.kafka.ui.image | quote }}
+        env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          value: "K8 Kafka Cluster"
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+        ports:
+        - containerPort: 8080
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-connectors
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: create-connectors
+        job-name: create-connectors
+    spec:
+      containers:
+      - name: create-connectors
+        image: {{ .Values.dataPlane.components.connectorsJob.image | quote }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Creating ClickHouse sink connector..."
+            ls -la /scripts
+            /scripts/create-clickhouse-sink.sh {{ .Release.Namespace }}
+        env:
+        - name: CLICKHOUSE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_HOST
+        - name: CLICKHOUSE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_PORT
+        - name: CLICKHOUSE_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_DATABASE
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse
+              key: admin-password
+        volumeMounts:
+        - name: connector-scripts
+          mountPath: /scripts
+      volumes:
+      - name: connector-scripts
+        configMap:
+          name: connector-scripts
+          defaultMode: 0755
+      restartPolicy: OnFailure
+

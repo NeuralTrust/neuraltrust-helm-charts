@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-worker"
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker 
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: "{{ .Values.dataPlane.components.worker.image.repository }}:{{ .Values.dataPlane.components.worker.image.tag }}"
+        imagePullPolicy: "{{ .Values.dataPlane.components.worker.image.pullPolicy }}"
+        env:
+        - name: ENV
+          value: "prod"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: NEURALTRUST_CLASSIFIER_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: "{{ .Release.Name }}-secrets"
+              key: NEURALTRUST_CLASSIFIER_MODEL
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: "openai-secrets"
+              key: OPENAI_API_KEY
+        - name: CLICKHOUSE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_HOST
+        - name: CLICKHOUSE_PORT
+          value: "8123"
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse
+              key: admin-password
+        - name: CLICKHOUSE_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-secrets
+              key: CLICKHOUSE_DATABASE
+        command: ["python", "-u", "src/listen.py"]
+        resources:
+          {{- toYaml .Values.dataPlane.components.worker.resources | nindent 10 }}
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep "python -u src/listen.py" | grep -v grep
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 30  # Allow up to 5 minutes (30 * 10s) for startup
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep "python -u src/listen.py" | grep -v grep
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3

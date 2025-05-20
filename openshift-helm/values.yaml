@@ -1,0 +1,239 @@
+global:
+  postgresql:
+    enabled: false
+  accessMode: ReadWriteOnce
+  classifierModel: "gpt"
+  issuer:
+    name: "letsencrypt-prod"
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+  # Network policies
+  network:
+    controlPlaneCidr: "10.0.0.0/16"
+    dataPlanecidr: "10.1.0.0/16"
+    clientDataPlaneCidr: ""
+    clientVpnCidr: ""
+    excludedClientRanges: []
+  ingress:
+    enabled: true
+    controller:
+      enabled: true  # Set to false to skip installing the ingress controller
+  certManager:
+    enabled: true  # Set to false to skip installing cert-manager
+  resend:
+    apiKey: "${RESEND_API_KEY}"
+    alertSender: "${RESEND_ALERT_SENDER}"
+    inviteSender: "${RESEND_INVITE_SENDER}"
+  clerk:
+    publishableKey: "${CLERK_PUBLISHABLE_KEY}"
+    secretKey: "${CLERK_SECRET_KEY}"
+    webhookSecretSessions: "${CLERK_WEBHOOK_SECRET_SESSIONS}"
+    webhookSecretUsers: "${CLERK_WEBHOOK_SECRET_USERS}"
+    authorizationCallbackUrl: "${CLERK_AUTHORIZATION_CALLBACK_URL}"
+    signInUrl: "${CLERK_SIGN_IN_URL}"
+    signUpUrl: "${CLERK_SIGN_UP_URL}"
+  kafka:
+    enabled: true
+    connect:
+      replicas: 1
+      image: confluentinc/cp-server-connect:7.7.0
+      imagePullSecrets:
+        - name: ""
+    broker:
+      replicas: 1
+      imagePullSecrets:
+        - name: ""
+    ui:
+      image: provectuslabs/kafka-ui:latest
+
+cert-manager:
+  enabled: ${global.certManager.enabled}
+  email: victor.garcia@neuraltrust.ai
+  issuer:
+    dns01:
+      enabled: false
+    name: "letsencrypt-prod"
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+
+clickhouse:
+  enabled: true
+  backup:
+    enabled: false
+    type: "s3"  # s3 or gcs
+    image:
+      repository: "curlimages/curl"
+      tag: "latest"
+    s3:
+      bucket: "${S3_BUCKET}"
+      region: "${S3_REGION}"
+      accessKey: "${S3_ACCESS_KEY}"
+      secretKey: "${S3_SECRET_KEY}"
+      endpoint: "${S3_ENDPOINT}"  # Optional, for custom S3-compatible endpoints
+    gcs:
+      bucket: "${GCS_BUCKET}"
+      accessKey: "${GCS_ACCESS_KEY}"
+      secretKey: "${GCS_SECRET_KEY}"
+  auth:
+    username: "neuraltrust"
+  image:
+    repository: "clickhouse/clickhouse-server"
+    tag: "latest"
+    pullPolicy: "Always"
+    imagePullSecrets:
+      - name: ""
+
+controlPlane:
+  enabled: true
+  components:
+    scheduler:
+      enabled: true
+      host: "${CONTROL_PLANE_SCHEDULER_URL}"
+      image:
+        repository: "${CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY}"
+        tag: "${CONTROL_PLANE_SCHEDULER_IMAGE_TAG}"
+        pullPolicy: "${CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY}"
+        imagePullSecrets:
+          - name: gcr-secret
+      env:
+        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
+        dataPlaneApiVersion: v1
+        dataPlaneJwtSecret: "${DATA_PLANE_JWT_SECRET}"
+    api:
+      enabled: true
+      image:
+        repository: "${API_IMAGE_REPOSITORY}"
+        tag: "${API_IMAGE_TAG}"
+        pullPolicy: "${API_IMAGE_PULL_POLICY}"
+        imagePullSecrets:
+          - name: gcr-secret
+      host: "${CONTROL_PLANE_API_URL}"
+      secrets:
+        controlPlaneJWTSecret: "${CONTROL_PLANE_JWT_SECRET}"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+    app:
+      enabled: true
+      replicaCount: 1
+      image:
+        repository: "${WEBAPP_IMAGE_REPOSITORY}"
+        tag: "${WEBAPP_IMAGE_TAG}"
+        pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
+        imagePullSecrets:
+          - name: gcr-secret
+      host: "${CONTROL_PLANE_APP_URL}"
+      secondaryHost: "${CONTROL_PLANE_APP_SECONDARY_URL}"
+      config:
+        nodeEnv: production
+        port: 3000
+        controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
+        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
+        openaiModel: "${OPENAI_MODEL}"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+dataPlane:
+  enabled: true
+  secrets:
+    # openaiApiKey: "" # Removed: Handled by install script
+    openaiApiKeySecretName: "openai-secrets" # Secret name for OpenAI key
+    # googleApiKey: "" # Removed: Handled by install script
+    googleApiKeySecretName: "google-secrets" # Secret name for Google key
+  components:
+    api:
+      enabled: true
+      image:
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/api
+        tag: latest
+        pullPolicy: Always
+        imagePullSecrets:
+          - name: gcr-secret
+      host: "${DATA_PLANE_API_URL}"
+      accessMode: ReadWriteOnce
+      huggingfaceToken: "${HUGGINGFACE_TOKEN}"
+      storage: 10Gi
+      # TrustTest Configuration (.trusttest_config.json)
+      trustTestConfig:
+        evaluator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+        question_generator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.5
+        embeddings:
+          provider: "openai"
+          model: "text-embedding-3-small"
+        topic_summarizer:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 400m
+          memory: 1Gi
+    kafka:
+      enabled: true
+      connect:
+        replicas: 1
+        image: confluentinc/cp-server-connect:7.7.0 # Default Kafka Connect image
+        imagePullSecrets:
+          - name: ""
+      broker:
+        replicas: 1
+        imagePullSecrets:
+          - name: ""
+      ui:
+        image: provectuslabs/kafka-ui:latest # Default Kafka UI image
+    worker:
+      enabled: true
+      replicas: 1
+      image:
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers
+        tag: latest
+        pullPolicy: Always
+        imagePullSecrets:
+          - name: gcr-secret
+      resources:
+        requests:
+          memory: 4Gi
+          cpu: 1000m
+        limits:
+          memory: 8Gi
+          cpu: 2000m
+    connectorsJob: # New section for the create-connectors job
+      image: curlimages/curl:latest # Default image for create-connectors job
+
+postgresql:
+  enabled: ${global.postgresql.enabled}
+  image:
+    repository: "postgres"
+    tag: "15-alpine"
+    pullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: ""
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  service:
+    type: ClusterIP
+    port: 5432
