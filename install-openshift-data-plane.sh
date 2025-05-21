@@ -40,15 +40,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Set up additional Helm values based on parameters
-ADDITIONAL_VALUES=""
-# Default for OpenShift: disable chart's Ingress, assume Routes will be used or chart handles it
-ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.ingress.enabled=false"
-
-if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
-    ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set dataPlane.imagePullSecrets=gcr-secret"
-fi
-
 verify_environment() {
     local env="${1:-$ENVIRONMENT}"
     if [ -z "$env" ]; then
@@ -365,28 +356,24 @@ install_data_plane() {
         FINAL_DATA_PLANE_API_URL=$DATA_PLANE_API_URL
     fi
 
-    # Define default secret names, users can override these via VALUES_FILE or --set
-    OPENAI_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-openai-api-key"
-    GOOGLE_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-google-api-key"
-    DATA_PLANE_JWT_SECRET_NAME_DEFAULT="$RELEASE_NAME-data-plane-jwt-secret"
-    RESEND_API_KEY_SECRET_NAME_DEFAULT="$RELEASE_NAME-resend-secrets"
+    PULL_SECRET=""
+    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+        PULL_SECRET="gcr-secret"
+    fi
 
     helm upgrade --install data-plane ./openshift-helm/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
+        --set dataPlane.imagePullSecrets="$PULL_SECRET" \
         --set dataPlane.components.api.host=$FINAL_DATA_PLANE_API_URL \
         --set dataPlane.components.api.image.repository="$DATA_PLANE_API_IMAGE_REPOSITORY" \
         --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
         --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
-        --set dataPlane.secrets.dataPlaneJWTSecretName="${DATA_PLANE_JWT_SECRET_NAME:-$DATA_PLANE_JWT_SECRET_NAME_DEFAULT}" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
-        --set dataPlane.secrets.openaiApiKeySecretName="${OPENAI_API_KEY_SECRET_NAME:-$OPENAI_API_KEY_SECRET_NAME_DEFAULT}" \
         --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
-        --set dataPlane.secrets.googleApiKeySecretName="${GOOGLE_API_KEY_SECRET_NAME:-$GOOGLE_API_KEY_SECRET_NAME_DEFAULT}" \
         --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
-        --set dataPlane.secrets.resendApiKeySecretName="${RESEND_API_KEY_SECRET_NAME:-$RESEND_API_KEY_SECRET_NAME_DEFAULT}" \
         --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
         --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
         --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
@@ -400,7 +387,6 @@ install_data_plane() {
         --set clickhouse.backup.gcs.bucket="$GCS_BUCKET" \
         --set clickhouse.backup.gcs.accessKey="$GCS_ACCESS_KEY" \
         --set clickhouse.backup.gcs.secretKey="$GCS_SECRET_KEY" \
-        $ADDITIONAL_VALUES \
         --wait
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"

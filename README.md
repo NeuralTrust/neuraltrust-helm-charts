@@ -88,6 +88,30 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
 - HuggingFace token (provided by NeuralTrust)
 - Google Container Registry (GCR) service account key (provided by NeuralTrust)
 
+### Docker Images
+
+The platform uses the following docker images:
+
+- Data Plane
+  - Open source images:
+    - Clickhouse: docker.io/bitnami/clickhouse:25.3.2-debian-12-r3
+    - Kafka: docker.io/bitnami/kafka:3.9.0-debian-12-r1
+    - Zookeeper: docker.io/bitnami/zookeeper:3.9.3-debian-12-r0
+    - Kafka-ui: provectuslabs/kafka-ui:latest
+    - Kafka-connect: confluentinc/cp-server-connect:7.7.0
+    - Create-connectors: curlimages/curl:latest
+  - Private images:
+    - Api: nt-docker/data-plane-api
+    - Worker: nt-docker/workers
+
+- Control Plane
+  - Open source images:
+    - Postgres: postgres:15-alpine
+  - Private images:
+    - Api: nt-docker/control-plane-api
+    - App: nt-docker/app
+    - Scheduler: nt-docker/scheduler
+
 ### Required Tools
 
 - `kubectl`: For interacting with the Kubernetes cluster

@@ -46,10 +46,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set up additional Helm values based on parameters
-ADDITIONAL_VALUES=""
-if [ "$INSTALL_POSTGRESQL" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.postgresql.enabled=true"
-fi
 
 verify_environment() {
     local env="${1:-$ENVIRONMENT}"
@@ -240,15 +236,19 @@ install_control_plane() {
     # Create required secrets
     create_control_plane_secrets
 
+    PULL_SECRET=""
     if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
-        ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set controlPlane.imagePullSecrets=gcr-secret"
+        PULL_SECRET="gcr-secret"
     fi
+
 
     # Install control plane components
     log_info "Installing control plane..."
     helm upgrade --install $RELEASE_NAME ./openshift-helm/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
+        --set controlPlane.imagePullSecrets="$PULL_SECRET" \
+        --set global.postgresql.enabled="$INSTALL_POSTGRESQL" \
         --set controlPlane.components.api.host="$CONTROL_PLANE_API_URL" \
         --set controlPlane.components.api.image.repository="$CONTROL_PLANE_API_IMAGE_REPOSITORY" \
         --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \

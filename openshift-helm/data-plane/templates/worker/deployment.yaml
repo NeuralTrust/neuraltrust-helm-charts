@@ -37,8 +37,13 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: "openai-secrets"
+              name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
               key: OPENAI_API_KEY
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+              key: GOOGLE_API_KEY
         - name: CLICKHOUSE_HOST
           valueFrom:
             secretKeyRef:

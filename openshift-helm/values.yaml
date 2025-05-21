@@ -13,12 +13,6 @@ global:
     clientDataPlaneCidr: ""
     clientVpnCidr: ""
     excludedClientRanges: []
-  ingress:
-    enabled: true
-    controller:
-      enabled: true  # Set to false to skip installing the ingress controller
-  certManager:
-    enabled: true  # Set to false to skip installing cert-manager
   resend:
     apiKey: "${RESEND_API_KEY}"
     alertSender: "${RESEND_ALERT_SENDER}"
@@ -142,10 +136,14 @@ controlPlane:
 dataPlane:
   enabled: true
   secrets:
-    # openaiApiKey: "" # Removed: Handled by install script
     openaiApiKeySecretName: "openai-secrets" # Secret name for OpenAI key
-    # googleApiKey: "" # Removed: Handled by install script
+    openaiApiKey: "${OPENAI_API_KEY}"
     googleApiKeySecretName: "google-secrets" # Secret name for Google key
+    googleApiKey: "${GOOGLE_API_KEY}"
+    resendApiKeySecretName: "resend-secrets" # Secret name for Resend key
+    resendApiKey: "${RESEND_API_KEY}"
+    dataPlaneJWTSecretName: "data-plane-jwt-secret" # Secret name for Data Plane JWT
+    dataPlaneJWTSecret: "${DATA_PLANE_JWT_SECRET}"
   components:
     api:
       enabled: true
