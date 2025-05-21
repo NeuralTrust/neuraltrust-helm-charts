@@ -16,8 +16,10 @@ spec:
         app: {{ .Release.Name }}-api
         plane: control
     spec:
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.api.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: {{ .Release.Name }}-api
         image: "{{ .Values.controlPlane.components.api.image.repository }}:{{ .Values.controlPlane.components.api.image.tag }}"

@@ -13,7 +13,6 @@ DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="openshift-helm/values.yaml"
 
 # Parse command line arguments
-SKIP_CERT_MANAGER=true
 INSTALL_POSTGRESQL=false
 RELEASE_NAME="control-plane"
 USE_OPENSHIFT_IMAGESTREAM=false # Default to using OpenShift ImageStream
@@ -21,10 +20,6 @@ USE_OPENSHIFT_IMAGESTREAM=false # Default to using OpenShift ImageStream
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
-    --skip-cert-manager)
-      SKIP_CERT_MANAGER=true
-      shift
-      ;;
     --install-postgresql)
       INSTALL_POSTGRESQL=true
       shift
@@ -52,9 +47,6 @@ done
 
 # Set up additional Helm values based on parameters
 ADDITIONAL_VALUES=""
-if [ "$SKIP_CERT_MANAGER" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
-fi
 if [ "$INSTALL_POSTGRESQL" = true ]; then
   ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.postgresql.enabled=true"
 fi
@@ -233,70 +225,6 @@ create_control_plane_secrets() {
     fi
 }
 
-# Function to check if cert-manager is installed in any namespace
-check_cert_manager_installed() {
-    # Check in common namespaces where cert-manager might be installed
-    if oc get deployment -n cert-manager cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in cert-manager namespace"
-        return 0
-    elif oc get deployment -n kube-system cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in kube-system namespace"
-        return 0
-    elif oc get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in $NAMESPACE namespace"
-        return 0
-    else
-        # Check across all namespaces as a last resort
-        if oc get deployment --all-namespaces | grep cert-manager-webhook &> /dev/null; then
-            log_info "cert-manager found in another namespace"
-            return 0
-        fi
-    fi
-    return 1
-}
-
-# Function to install cert-manager if needed
-install_cert_manager() {
-    if [ "$SKIP_CERT_MANAGER" = true ]; then
-        log_info "Skipping cert-manager installation as requested"
-        return 0
-    fi
-    
-    if ! check_cert_manager_installed; then
-        log_info "Installing cert-manager..."
-        helm upgrade --install cert-manager jetstack/cert-manager \
-            --namespace "$NAMESPACE" \
-            --set installCRDs=true \
-            --wait
-
-        # Wait for cert-manager webhook to be ready
-        log_info "Waiting for cert-manager webhook..."
-        oc wait --for=condition=Available deployment/cert-manager-webhook \
-            --namespace "$NAMESPACE" \
-            --timeout=120s
-
-        # Create ClusterIssuer
-        log_info "Creating ClusterIssuer..."
-        oc apply -f - <<EOF
-        apiVersion: cert-manager.io/v1
-        kind: ClusterIssuer
-        metadata:
-          name: letsencrypt-prod
-        spec:
-          acme:
-            server: https://acme-v02.api.letsencrypt.org/directory
-            email: ${EMAIL}
-            privateKeySecretRef:
-              name: letsencrypt-prod
-            solvers:
-            - http01:
-                route: {} # Configure for OpenShift Routes
-EOF
-    else
-        log_info "cert-manager already installed, skipping..."
-    fi
-}
-
 install_control_plane() {
     log_info "Installing NeuralTrust Control Plane infrastructure..."
 
@@ -307,21 +235,20 @@ install_control_plane() {
     # Add required Helm repositories
     log_info "Adding Helm repositories..."
     helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add jetstack https://charts.jetstack.io
     helm repo update
-
-    # Install cert-manager if needed
-    install_cert_manager
 
     # Create required secrets
     create_control_plane_secrets
+
+    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+        ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set controlPlane.imagePullSecrets=gcr-secret"
+    fi
 
     # Install control plane components
     log_info "Installing control plane..."
     helm upgrade --install $RELEASE_NAME ./openshift-helm/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
-        --timeout 15m \
         --set controlPlane.components.api.host="$CONTROL_PLANE_API_URL" \
         --set controlPlane.components.api.image.repository="$CONTROL_PLANE_API_IMAGE_REPOSITORY" \
         --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \
@@ -351,6 +278,7 @@ install_control_plane() {
         --set controlPlane.components.global.clerk.signInUrl="$NEXT_PUBLIC_CLERK_SIGN_IN_URL" \
         --set controlPlane.components.global.clerk.signUpUrl="$NEXT_PUBLIC_CLERK_SIGN_UP_URL" \
         $ADDITIONAL_VALUES \
+        --timeout 15m \
         --wait
 
     # If CONTROL_PLANE_API_URL was initially empty (meaning OpenShift generates the API host),

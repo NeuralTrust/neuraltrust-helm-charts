@@ -96,8 +96,10 @@ spec:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.app.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: app
         image: "{{ .Values.controlPlane.components.app.image.repository }}:{{ .Values.controlPlane.components.app.image.tag }}"

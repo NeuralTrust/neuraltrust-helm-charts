@@ -16,8 +16,10 @@ spec:
         app: {{ .Release.Name }}-scheduler
         plane: control
     spec:
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.scheduler.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: {{ .Release.Name }}-scheduler
         image: "{{ .Values.controlPlane.components.scheduler.image.repository }}:{{ .Values.controlPlane.components.scheduler.image.tag }}"
