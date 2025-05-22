@@ -1,7 +1,8 @@
 clients/
 # Environment files
 .env*
-!.env.example
+!.env.control-plane.example
+!.env.data-plane.example
 gcr-keys.json
 
 # Credentials

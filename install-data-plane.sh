@@ -94,7 +94,7 @@ verify_environment() {
     fi
 }
 
-ENV_FILE=".env.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.data-plane.${ENVIRONMENT:-prod}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
