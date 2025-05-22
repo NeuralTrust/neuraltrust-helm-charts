@@ -94,7 +94,7 @@ verify_environment() {
     fi
 }
 
-ENV_FILE=".env.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.data-plane.${ENVIRONMENT:-prod}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
@@ -314,7 +314,7 @@ install_databases() {
     
     kubectl create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=helm/data-plane/templates/1.clickhouse/sql-configmap.yaml \
+        --from-file=helm/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | kubectl apply -f -
 }
 

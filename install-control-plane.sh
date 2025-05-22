@@ -103,7 +103,7 @@ verify_environment() {
     fi
 }
 
-ENV_FILE=".env.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.control-plane.${ENVIRONMENT:-prod}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then

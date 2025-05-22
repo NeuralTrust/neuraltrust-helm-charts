@@ -78,7 +78,7 @@ Ensure your network allows:
 
 Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the following:
 
-- Kubernetes cluster (v1.20+)
+- Kubernetes cluster (v1.20+) or OpenShift cluster (v4.x+)
   - Minimum of 3 nodes
   - Each node: 4 vCPUs, 16 GB Memory
   - Total cluster resources: 12+ vCPUs, 48+ GB Memory
@@ -87,6 +87,30 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
 - OpenAI API key or Google API key (at least one is required)
 - HuggingFace token (provided by NeuralTrust)
 - Google Container Registry (GCR) service account key (provided by NeuralTrust)
+
+### Docker Images
+
+The platform uses the following docker images:
+
+- Data Plane
+  - Open source images:
+    - Clickhouse: docker.io/bitnami/clickhouse:25.3.2-debian-12-r3
+    - Kafka: docker.io/bitnami/kafka:3.9.0-debian-12-r1
+    - Zookeeper: docker.io/bitnami/zookeeper:3.9.3-debian-12-r0
+    - Kafka-ui: provectuslabs/kafka-ui:latest
+    - Kafka-connect: confluentinc/cp-server-connect:7.7.0
+    - Create-connectors: curlimages/curl:latest
+  - Private images:
+    - Api: nt-docker/data-plane-api
+    - Worker: nt-docker/workers
+
+- Control Plane
+  - Open source images:
+    - Postgres: postgres:15-alpine
+  - Private images:
+    - Api: nt-docker/control-plane-api
+    - App: nt-docker/app
+    - Scheduler: nt-docker/scheduler
 
 ### Required Tools
 
@@ -106,14 +130,20 @@ Before installing [NeuralTrust](https://neuraltrust.ai), ensure you have the fol
    ```
 
 2. Create environment files:
-   - For development: `.env.dev`
-   - For production: `.env.prod`
+   - For the Data Plane: `.env.data-plane.$ENVIRONMENT` (e.g., `.env.data-plane.dev`, `.env.data-plane.prod`)
+   - For the Control Plane: `.env.control-plane.$ENVIRONMENT` (e.g., `.env.control-plane.dev`, `.env.control-plane.prod`)
 
-   You can use the provided `.env.example` file as a template:
+   You can use the provided `.env.data-plane.example` and `.env.control-plane.example` files as templates. For example, to create the data plane development environment file:
    ```bash
-   cp .env.example .env.dev
+   cp .env.data-plane.example .env.data-plane.dev
    # Edit the file with your values
-   nano .env.dev
+   nano .env.data-plane.dev
+   ```
+   And for the control plane development environment file:
+   ```bash
+   cp .env.control-plane.example .env.control-plane.dev
+   # Edit the file with your values
+   nano .env.control-plane.dev
    ```
 
 ### Environment Variables
@@ -216,6 +246,21 @@ The script will:
 6. Install Kafka for messaging
 7. Deploy the Data Plane components
    - The API component now uses a `.trusttest_config.json` file (configurable via `values.yaml`) to determine which LLM provider (OpenAI or Google) and model to use for specific tasks like evaluation and summarization.
+
+### OpenShift Installation
+
+If you are deploying to an OpenShift cluster, use the following scripts instead:
+
+- To install the Data Plane on OpenShift:
+  ```bash
+  ./install-openshift-data-plane.sh
+  ```
+
+- To install the Control Plane on OpenShift (if applicable):
+  ```bash
+  ./install-openshift-control-plane.sh
+  ```
+  Note: The Control Plane is typically managed by NeuralTrust. Consult NeuralTrust documentation or support if you intend to self-host the Control Plane.
 
 ## Domain Configuration
 

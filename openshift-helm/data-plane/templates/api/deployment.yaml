@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-api"
+  labels:
+    app: api
+    plane: data
+spec:
+  replicas: {{ .Values.dataPlane.components.api.replicas }}
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+        plane: data
+    spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
+      imagePullSecrets:
+        - name: gcr-secret
+      {{- end }}
+      containers:
+      - name: api
+        image: "{{ .Values.dataPlane.components.api.image.repository }}:{{ .Values.dataPlane.components.api.image.tag }}"
+        imagePullPolicy: {{ .Values.dataPlane.components.api.image.pullPolicy }}
+        ports:
+        - containerPort: 8000
+        env:
+          - name: PORT
+            value: "8000"
+          - name: DATA_PLANE_JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.dataPlaneJWTSecretName }}
+                key: DATA_PLANE_JWT_SECRET
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
+                key: OPENAI_API_KEY
+          - name: GOOGLE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+                key: GOOGLE_API_KEY
+          - name: RESEND_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.resendApiKeySecretName }}
+                key: RESEND_API_KEY
+          - name: KAFKA_BOOTSTRAP_SERVERS
+            value: "kafka:9092"
+          - name: HF_HOME
+            value: "/root/.cache/huggingface"
+          - name: HUGGINGFACE_TOKEN
+            value: "{{ .Values.dataPlane.components.api.huggingfaceToken }}"
+          - name: PYTHONPATH
+            value: "/app"
+          - name: CLICKHOUSE_HOST
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-secrets
+                key: CLICKHOUSE_HOST
+          - name: CLICKHOUSE_PORT
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-secrets
+                key: CLICKHOUSE_PORT
+          - name: CLICKHOUSE_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-secrets
+                key: CLICKHOUSE_DATABASE
+          - name: CLICKHOUSE_USER
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-secrets
+                key: CLICKHOUSE_USER
+          - name: CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse
+                key: admin-password
+        volumeMounts:
+          - name: huggingface-cache
+            mountPath: "/root/.cache/huggingface"
+          {{- if .Values.dataPlane.components.api.trustTestConfig }}
+          - name: trusttest-config-volume
+            mountPath: /app/.trusttest_config.json # Assuming app runs from /app
+            subPath: .trusttest_config.json
+          {{- end }}
+        resources:
+          {{- toYaml .Values.dataPlane.components.api.resources | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            httpHeaders:
+            - name: Accept
+              value: application/json
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            httpHeaders:
+            - name: Accept
+              value: application/json
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 60
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            httpHeaders:
+            - name: Accept
+              value: application/json
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30
+      volumes:
+      - name: huggingface-cache
+        persistentVolumeClaim:
+          claimName: "{{ .Release.Name }}-huggingface-cache"
+      {{- if .Values.dataPlane.components.api.trustTestConfig }}
+      - name: trusttest-config-volume
+        configMap:
+          name: {{ .Release.Name }}-trusttest-config
+      {{- end }}
