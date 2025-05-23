@@ -1,0 +1,72 @@
+kraft:
+  enabled: false
+
+extraConfigYaml:
+  default.replication.factor: 1
+
+extraEnvVars:
+  - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+    value: "1"
+  - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+    value: "1"
+  - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+    value: "1"
+  - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+    value: "1"
+  - name: KAFKA_CFG_MIN_INSYNC_REPLICAS
+    value: "1"
+  - name: KAFKA_NUM_PARTITIONS
+    value: "3"
+  - name: KAFKA_CFG_LOG4J_ROOT_LOGLEVEL
+    value: "ERROR"
+  - name: KAFKA_CFG_LOG4J_LOGGERS
+    value: "kafka.controller=ERROR,kafka.producer.async.default=ERROR,kafka.consumer.group=ERROR,kafka.network.RequestChannel=ERROR,kafka.server=ERROR,kafka.authorizer=ERROR,kafka.log=ERROR,kafka.cluster=ERROR,kafka.coordinator=ERROR,kafka.log4j=ERROR"
+
+auth:
+  interBrokerProtocol: PLAINTEXT
+  clientProtocol: PLAINTEXT
+
+listeners:
+  client:
+    containerPort: 9092
+    protocol: PLAINTEXT
+    name: CLIENT
+    sslClientAuth: ""
+  interbroker:
+    containerPort: 9094
+    protocol: PLAINTEXT
+    name: INTERNAL
+    sslClientAuth: ""
+
+broker:
+  replicaCount: 1
+  podAntiAffinityPreset: hard
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+provisioning:
+  enabled: true
+  replicationFactor: 1
+  topics:
+    - name: __consumer_offsets
+      partitions: 50
+      replicationFactor: 1
+    - name: __transaction_state
+      partitions: 50
+      replicationFactor: 1
+
+controller:
+  replicaCount: 0
+
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  podAntiAffinityPreset: hard
+  auth:
+    client:
+      enabled: false
