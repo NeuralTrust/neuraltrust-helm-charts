@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-app
+  labels:
+    app: {{ .Release.Name }}-app
+spec:
+  replicas: {{ .Values.controlPlane.components.app.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-app
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-app
+    spec:
+      initContainers:
+      - name: init-db
+        image: "{{ .Values.controlPlane.components.app.image.repository }}:{{ .Values.controlPlane.components.app.image.tag }}"
+        # The image already runs as nextjs user with UID 1001
+        command: ["/bin/sh", "-c"]
+        args: 
+          - |
+            # Wait for PostgreSQL to be ready
+            echo "Waiting for PostgreSQL..."
+            echo "POSTGRES_HOST: $POSTGRES_HOST"
+            echo "POSTGRES_PORT: $POSTGRES_PORT"
+            echo "POSTGRES_DATABASE: $POSTGRES_DATABASE"
+            
+            # Check if PostgreSQL is ready
+            until nc -z -w 2 $POSTGRES_HOST $POSTGRES_PORT; do
+              echo "Waiting for PostgreSQL to be ready..."
+              sleep 2
+            done
+            
+            echo "PostgreSQL is ready, running database migrations..."
+            
+            # Set Prisma environment variables to avoid network access
+            export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
+            export PRISMA_GENERATE_SKIP_AUTOINSTALL=true
+            export PRISMA_SKIP_POSTINSTALL_GENERATE=true
+            
+            # Try to find prisma in the image's node_modules
+            if [ -f /app/node_modules/.bin/prisma ]; then
+              echo "Using Prisma from /app/node_modules/.bin/prisma"
+              /app/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            elif [ -f /node_modules/.bin/prisma ]; then
+              echo "Using Prisma from /node_modules/.bin/prisma"
+              /node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            else
+              echo "Prisma CLI not found in node_modules, using npx as fallback"
+              # Use npx with --prefer-offline to avoid network access if possible
+              npx --prefer-offline prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+            fi
+            
+            echo "Database migrations completed successfully"
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_PRISMA_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+        - name: CONTROL_PLANE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: control-plane-jwt-secret
+              key: CONTROL_PLANE_JWT_SECRET
+        - name: DATA_PLANE_API_URL
+          value: "https://{{ .Values.controlPlane.components.app.config.apiUrl }}"
+        - name: DATA_PLANE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-plane-jwt-secret
+              key: DATA_PLANE_JWT_SECRET
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
+      imagePullSecrets:
+        - name: gcr-secret
+      {{- end }}
+      containers:
+      - name: app
+        image: "{{ .Values.controlPlane.components.app.image.repository }}:{{ .Values.controlPlane.components.app.image.tag }}"
+        imagePullPolicy: "{{ .Values.controlPlane.components.app.image.pullPolicy }}"
+        ports:
+        - containerPort: {{ .Values.controlPlane.components.app.config.port }}
+        env:
+        - name: NODE_ENV
+          value: "{{ .Values.controlPlane.components.app.config.nodeEnv }}"
+        - name: PORT
+          value: "{{ .Values.controlPlane.components.app.config.port }}"
+        - name: NT_API_URL
+          value: "http://neuraltrust-api-service.neuraltrust.svc.cluster.local:80"
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_PRISMA_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+        - name: RESEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: resend-api-key
+        - name: SENDER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: resend-invite-sender
+        - name: CLERK_PUBLISHABLE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-publishable-key
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-secret-key
+        - name: CLERK_WEBHOOK_SECRET_SESSIONS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-webhook-secret-sessions
+        - name: CLERK_WEBHOOK_SECRET_USERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-webhook-secret-users
+        - name: CLERK_AUTHORIZATION_CALLBACK_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-authorization-callback-url
+        - name: CLERK_SIGN_IN_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-sign-in-url
+        - name: CLERK_SIGN_UP_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: clerk-sign-up-url
+        - name: APP_URL
+          value: "https://{{ .Values.controlPlane.components.app.host }}"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-secrets
+              key: OPENAI_API_KEY
+        - name: OPENAI_MODEL
+          value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
+        - name: CONTROL_PLANE_API_URL
+          value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneApiUrl }}"
+        - name: CONTROL_PLANE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: control-plane-jwt-secret
+              key: CONTROL_PLANE_JWT_SECRET
+        - name: DATA_PLANE_API_URL
+          value: "https://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+        - name: DATA_PLANE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-plane-jwt-secret
+              key: DATA_PLANE_JWT_SECRET
+        - name: CONTROL_PLANE_SCHEDULER_URL
+          value: "https://{{ .Values.controlPlane.components.scheduler.host }}"
+        resources:
+          {{- toYaml .Values.controlPlane.components.app.resources | nindent 10 }}
