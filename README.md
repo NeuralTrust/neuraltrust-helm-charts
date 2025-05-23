@@ -115,8 +115,8 @@ The platform uses the following docker images:
 ### Required Tools
 
 - `kubectl`: For interacting with the Kubernetes cluster
+- `oc`: For Openshift deployments.
 - `helm`: For deploying Kubernetes applications
-- `yq`: For YAML processing
 - `jq`: For JSON processing
 
 ## Installation
