@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm/values.yaml"
+VALUES_FILE="helm-k8s/values.yaml"
 
 # Parse command line arguments
 SKIP_INGRESS=false
@@ -314,7 +314,7 @@ install_databases() {
     
     kubectl create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=helm/data-plane/templates/clickhouse/sql-configmap.yaml \
+        --from-file=helm-k8s/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | kubectl apply -f -
 }
 
@@ -325,7 +325,7 @@ install_messaging() {
     helm upgrade --install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
         --version 31.0.0 \
         --namespace "$NAMESPACE" \
-        -f helm/values-kafka.yaml \
+        -f helm-k8s/values-kafka.yaml \
         --wait
 }
 
@@ -485,7 +485,7 @@ install_data_plane() {
 
     # Install data plane components for SaaS
     log_info "Installing data plane components..."
-    helm upgrade --install data-plane ./helm/data-plane \
+    helm upgrade --install data-plane ./helm-k8s/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \

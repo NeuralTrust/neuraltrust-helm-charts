@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="openshift-helm/values.yaml"
+VALUES_FILE="helm-openshift/values.yaml"
 
 # Parse command line arguments
 RELEASE_NAME="data-plane"
@@ -286,7 +286,7 @@ install_databases() {
     
     oc create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=openshift-helm/data-plane/templates/clickhouse/sql-configmap.yaml \
+        --from-file=helm-openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | oc apply -f -
 }
 
@@ -305,7 +305,7 @@ install_messaging() {
     helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
         --version "$KAFKA_CHART_VERSION_FINAL" \
         --namespace "$NAMESPACE" \
-        -f openshift-helm/values-kafka.yaml \
+        -f helm-openshift/values-kafka.yaml \
         --wait
 }
 
@@ -361,7 +361,7 @@ install_data_plane() {
         PULL_SECRET="gcr-secret"
     fi
 
-    helm upgrade --install data-plane ./openshift-helm/data-plane \
+    helm upgrade --install data-plane ./helm-openshift/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \

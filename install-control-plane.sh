@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm/values.yaml"
+VALUES_FILE="helm-k8s/values.yaml"
 
 # Parse command line arguments
 SKIP_INGRESS=false
@@ -376,7 +376,7 @@ install_control_plane() {
 
     # Install control plane components
     log_info "Installing control plane..."
-    helm upgrade --install $RELEASE_NAME ./helm/control-plane \
+    helm upgrade --install $RELEASE_NAME ./helm-k8s/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
