@@ -37,7 +37,7 @@ global:
       imagePullSecrets:
         - name: ""
     ui:
-      image: provectuslabs/kafka-ui:latest
+      image: provectuslabs/kafka-ui:v0.7.2
 
 cert-manager:
   enabled: ${global.certManager.enabled}
@@ -70,7 +70,7 @@ clickhouse:
     username: "neuraltrust"
   image:
     repository: "clickhouse/clickhouse-server"
-    tag: "latest"
+    tag: "25.3.2"
     pullPolicy: "Always"
     imagePullSecrets:
       - name: ""
@@ -193,7 +193,7 @@ dataPlane:
         imagePullSecrets:
           - name: ""
       ui:
-        image: provectuslabs/kafka-ui:latest # Default Kafka UI image
+        image: provectuslabs/kafka-ui:v0.7.2 # Default Kafka UI image
     worker:
       enabled: true
       replicas: 1
@@ -211,7 +211,7 @@ dataPlane:
           memory: 8Gi
           cpu: 2000m
     connectorsJob: # New section for the create-connectors job
-      image: curlimages/curl:latest # Default image for create-connectors job
+      image: curlimages/curl:8.13.0 # Default image for create-connectors job
 
 postgresql:
   enabled: ${global.postgresql.enabled}

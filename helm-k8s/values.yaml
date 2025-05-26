@@ -60,7 +60,7 @@ clickhouse:
     username: "neuraltrust"
   image:
     repository: "clickhouse/clickhouse-server"
-    tag: "latest"
+    tag: "25.3.2"
     pullPolicy: "Always"
     imagePullSecrets:
       - name: ""

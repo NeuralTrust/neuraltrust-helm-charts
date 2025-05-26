@@ -106,7 +106,7 @@ spec:
     spec:
       containers:
       - name: kafka-ui
-        image: provectuslabs/kafka-ui:latest
+        image: provectuslabs/kafka-ui:v0.7.2
         env:
         - name: KAFKA_CLUSTERS_0_NAME
           value: "K8 Kafka Cluster"
@@ -140,7 +140,7 @@ spec:
     spec:
       containers:
       - name: create-connectors
-        image: curlimages/curl:latest
+        image: curlimages/curl:8.13.0
         command: ["/bin/sh", "-c"]
         args:
           - |
