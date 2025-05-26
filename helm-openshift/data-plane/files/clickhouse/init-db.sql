@@ -148,33 +148,34 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS metrics
 (
-    app_id String,
-    team_id String,
+    gateway_id String,
     trace_id String,
     interaction_id String,
     conversation_id String,
-    start_timestamp Int64,
-    end_timestamp Int64,
-    start_time DateTime MATERIALIZED fromUnixTimestamp64Milli(start_timestamp),
-    end_time DateTime MATERIALIZED fromUnixTimestamp64Milli(end_timestamp),
-    latency Int32,
+    path String,
     input String,
     output String,
     session_id String,
     task String,
     type String,
-    user_id String,
-    params JSON,
+    start_timestamp Int64,
+    end_timestamp Int64,
+    latency Int32,
+    user_ip String,
+    params String,
     method String,
-    request_headers JSON,
-    response_headers JSON,
+    upstream String,
+    plugin String,
+    request_headers String,
+    response_headers String,
     status_code Int32,
-    plugin JSON,
+    start_time DateTime MATERIALIZED fromUnixTimestamp(start_timestamp),
+    end_time DateTime MATERIALIZED fromUnixTimestamp(end_timestamp),
     event_date Date MATERIALIZED toDate(start_time),
     event_hour DateTime MATERIALIZED toStartOfHour(start_time)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_date)
-ORDER BY (event_hour, app_id, trace_id)
+ORDER BY (event_hour, gateway_id, trace_id)
 TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
