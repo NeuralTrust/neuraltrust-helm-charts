@@ -74,13 +74,13 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
 }' 
 
 
-echo "Creating ClickHouse firewall_metrics sink connector..."
+echo "Creating ClickHouse metrics sink connector..."
 curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
-  "name": "clickhouse-firewall-metrics-sink",
+  "name": "clickhouse-metrics-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
     "tasks.max": "1",
-    "topics": "firewall",
+    "topics": "metrics",
     "hostname": "'${CLICKHOUSE_HOST}'",
     "port": "'${CLICKHOUSE_PORT}'",
     "database": "'${CLICKHOUSE_DATABASE}'",
@@ -96,13 +96,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "errors.tolerance": "all",
     "errors.log.enable": "true",
     "errors.log.include.messages": "true",
-    "table.name": "firewall",
+    "table.name": "metrics",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false",
-    "transforms": "flattenJson",
-    "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
-    "transforms.flattenJson.delimiter": "_"
+    "value.converter.schemas.enable": "false"
   }
-}' 
+}'
 
