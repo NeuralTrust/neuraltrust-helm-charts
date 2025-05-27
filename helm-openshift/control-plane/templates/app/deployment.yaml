@@ -43,14 +43,14 @@ spec:
             # Try to find prisma in the image's node_modules
             if [ -f /app/node_modules/.bin/prisma ]; then
               echo "Using Prisma from /app/node_modules/.bin/prisma"
-              /app/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              /app/node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             elif [ -f /node_modules/.bin/prisma ]; then
               echo "Using Prisma from /node_modules/.bin/prisma"
-              /node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              /node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             else
               echo "Prisma CLI not found in node_modules, using npx as fallback"
               # Use npx with --prefer-offline to avoid network access if possible
-              npx --prefer-offline prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              npx --prefer-offline prisma migrate deploy --schema=/app/prisma/schema.prisma
             fi
             
             echo "Database migrations completed successfully"
