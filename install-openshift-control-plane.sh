@@ -15,7 +15,7 @@ VALUES_FILE="helm-openshift/values.yaml"
 # Parse command line arguments
 INSTALL_POSTGRESQL=false
 RELEASE_NAME="control-plane"
-USE_OPENSHIFT_IMAGESTREAM=false # Default to using OpenShift ImageStream
+AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -34,8 +34,8 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
-    --use-gcr) # Flag to use GCR instead of OpenShift ImageStream
-      USE_OPENSHIFT_IMAGESTREAM=false
+    --avoid-neuraltrust-private-registry)
+      AVOID_NEURALTRUST_PRIVATE_REGISTRY=true
       shift
       ;;
     *)
@@ -168,7 +168,7 @@ create_control_plane_secrets() {
         --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
         --dry-run=client -o yaml | oc apply -f -
 
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then # If not using OpenShift ImageStream, then set up GCR
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         # Create registry credentials secret
         log_info "Please provide your GCR service account key (JSON format)"
         log_info "This key is required to pull images from Google Container Registry"
@@ -228,16 +228,11 @@ install_control_plane() {
     prompt_for_namespace
     create_namespace_if_not_exists
 
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo update
-
     # Create required secrets
     create_control_plane_secrets
 
     PULL_SECRET=""
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         PULL_SECRET="gcr-secret"
     fi
 

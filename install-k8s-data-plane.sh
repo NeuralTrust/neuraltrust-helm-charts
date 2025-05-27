@@ -284,7 +284,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Install ClickHouse with backup configuration
-    helm upgrade --install clickhouse oci://registry-1.docker.io/bitnamicharts/clickhouse \
+    helm upgrade --install clickhouse "${CLICKHOUSE_CHART:-./clickhouse}" \
         --namespace "$NAMESPACE" \
         --version 8.0.10 \
         --set auth.username=neuraltrust \
@@ -322,8 +322,7 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Install Kafka
-    helm upgrade --install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
-        --version 31.0.0 \
+    helm upgrade --install kafka "${KAFKA_CHART:-./kafka}" \
         --namespace "$NAMESPACE" \
         -f helm-k8s/values-kafka.yaml \
         --wait
@@ -359,7 +358,7 @@ install_cert_manager() {
     
     if ! check_cert_manager_installed; then
         log_info "Installing cert-manager..."
-        helm upgrade --install cert-manager jetstack/cert-manager \
+        helm upgrade --install cert-manager "${CERT_MANAGER_CHART:-./cert-manager}" \
             --namespace "$NAMESPACE" \
             --set installCRDs=true \
             --wait
@@ -423,7 +422,7 @@ install_nginx_ingress() {
     
     if ! check_nginx_ingress_installed; then
         log_info "Installing NGINX Ingress Controller..."
-        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+        helm upgrade --install ingress-nginx "${NGINX_INGRESS_CHART:-./ingress-nginx}" \
             --namespace "$NAMESPACE" \
             --set controller.replicaCount=2 \
             --set controller.service.type=LoadBalancer \
@@ -457,13 +456,6 @@ install_data_plane() {
     prompt_for_google_api_key
     validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
-
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add jetstack https://charts.jetstack.io
-    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-    helm repo update
 
     # Install cert-manager first
     install_cert_manager
