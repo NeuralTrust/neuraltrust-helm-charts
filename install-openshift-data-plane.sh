@@ -14,7 +14,7 @@ VALUES_FILE="helm-openshift/values.yaml"
 
 # Parse command line arguments
 RELEASE_NAME="data-plane"
-USE_OPENSHIFT_IMAGESTREAM=false # if false uses GCP image registry
+AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -29,8 +29,8 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
-    --use-openshift-imagestream)
-      USE_OPENSHIFT_IMAGESTREAM=true
+    --avoid-neuraltrust-private-registry)
+      AVOID_NEURALTRUST_PRIVATE_REGISTRY=true
       shift
       ;;
     *)
@@ -190,7 +190,7 @@ create_data_plane_secrets() {
     # Secrets are now created by Helm chart based on values passed.
     # Ensure OPENAI_API_KEY, GOOGLE_API_KEY, RESEND_API_KEY, and DATA_PLANE_JWT_SECRET are available as shell variables.
 
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         # Create registry credentials secret
         log_info "Please provide your GCR service account key (JSON format)"
         log_info "This key is required to pull images from Google Container Registry"
@@ -248,7 +248,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Determine ClickHouse image repository
-    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-oci://registry-1.docker.io/bitnamicharts/clickhouse}"
+    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./clickhouse}"
     log_info "Using ClickHouse image repository: $CLICKHOUSE_IMAGE_REPO_FINAL"
 
     # Determine ClickHouse chart version
@@ -294,7 +294,7 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Determine Kafka image repository
-    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-oci://registry-1.docker.io/bitnamicharts/kafka}"
+    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./kafka}"
     log_info "Using Kafka image repository: $KAFKA_IMAGE_REPO_FINAL"
 
     # Determine Kafka chart version
@@ -327,17 +327,8 @@ install_data_plane() {
     validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
 
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    # helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-    helm repo update
-
     # Wait a moment for the ClusterIssuer to be ready
     sleep 10
-
-    # Install ingress controller
-    # install_nginx_ingress
 
     # Create required secrets
     create_data_plane_secrets
@@ -357,7 +348,7 @@ install_data_plane() {
     fi
 
     PULL_SECRET=""
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         PULL_SECRET="gcr-secret"
     fi
 
