@@ -55,7 +55,7 @@ clickhouse:
     type: "s3"  # s3 or gcs
     image:
       repository: "curlimages/curl"
-      tag: "latest"
+      tag: "8.13.0"
     s3:
       bucket: "${S3_BUCKET}"
       region: "${S3_REGION}"
