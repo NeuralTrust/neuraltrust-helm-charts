@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-k8s/values.yaml"
+VALUES_FILE="helm-charts/k8s/values.yaml"
 
 # Parse command line arguments
 SKIP_INGRESS=false
@@ -284,7 +284,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Install ClickHouse with backup configuration
-    helm upgrade --install clickhouse "${CLICKHOUSE_CHART:-./clickhouse}" \
+    helm upgrade --install clickhouse "${CLICKHOUSE_CHART:-./helm-charts/shared-charts/clickhouse}" \
         --namespace "$NAMESPACE" \
         --version 8.0.10 \
         --set auth.username=neuraltrust \
@@ -314,7 +314,7 @@ install_databases() {
     
     kubectl create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=helm-k8s/data-plane/templates/clickhouse/sql-configmap.yaml \
+        --from-file=helm-charts/k8s/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | kubectl apply -f -
 }
 
@@ -322,9 +322,9 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Install Kafka
-    helm upgrade --install kafka "${KAFKA_CHART:-./kafka}" \
+    helm upgrade --install kafka "${KAFKA_CHART:-./helm-charts/shared-charts/kafka}" \
         --namespace "$NAMESPACE" \
-        -f helm-k8s/values-kafka.yaml \
+        -f helm-charts/k8s/values-kafka.yaml \
         --wait
 }
 
@@ -358,7 +358,7 @@ install_cert_manager() {
     
     if ! check_cert_manager_installed; then
         log_info "Installing cert-manager..."
-        helm upgrade --install cert-manager "${CERT_MANAGER_CHART:-./cert-manager}" \
+        helm upgrade --install cert-manager "${CERT_MANAGER_CHART:-./helm-charts/shared-charts/cert-manager}" \
             --namespace "$NAMESPACE" \
             --set installCRDs=true \
             --wait
@@ -422,7 +422,7 @@ install_nginx_ingress() {
     
     if ! check_nginx_ingress_installed; then
         log_info "Installing NGINX Ingress Controller..."
-        helm upgrade --install ingress-nginx "${NGINX_INGRESS_CHART:-./ingress-nginx}" \
+        helm upgrade --install ingress-nginx "${NGINX_INGRESS_CHART:-./helm-charts/shared-charts/ingress-nginx}" \
             --namespace "$NAMESPACE" \
             --set controller.replicaCount=2 \
             --set controller.service.type=LoadBalancer \
@@ -477,7 +477,7 @@ install_data_plane() {
 
     # Install data plane components for SaaS
     log_info "Installing data plane components..."
-    helm upgrade --install data-plane ./helm-k8s/data-plane \
+    helm upgrade --install data-plane ./helm-charts/k8s/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: neuraltrust-data-plane
+description: Data Plane components for NeuralTrust
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: clickhouse
+    version: "8.0.10"
+    repository: "file://../../shared-charts/clickhouse"
+    alias: clickhouse # Explicitly alias for clarity in values
+  - name: kafka
+    version: "31.0.0"
+    repository: "file://../../shared-charts/kafka"
+    alias: kafka # Explicitly alias for clarity in values

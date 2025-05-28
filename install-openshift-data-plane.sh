@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-openshift/values.yaml"
+VALUES_FILE="helm-charts/openshift/values.yaml"
 
 # Parse command line arguments
 RELEASE_NAME="data-plane"
@@ -248,7 +248,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Determine ClickHouse image repository
-    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./clickhouse}"
+    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./helm-charts/shared-charts/clickhouse}"
     log_info "Using ClickHouse image repository: $CLICKHOUSE_IMAGE_REPO_FINAL"
 
     # Determine ClickHouse chart version
@@ -286,7 +286,7 @@ install_databases() {
     
     oc create configmap clickhouse-init-job \
         --namespace "$NAMESPACE" \
-        --from-file=helm-openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
+        --from-file=helm-charts/openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
         --dry-run=client -o yaml | oc apply -f -
 }
 
@@ -294,7 +294,7 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Determine Kafka image repository
-    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./kafka}"
+    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./helm-charts/shared-charts/kafka}"
     log_info "Using Kafka image repository: $KAFKA_IMAGE_REPO_FINAL"
 
     # Determine Kafka chart version
@@ -305,7 +305,7 @@ install_messaging() {
     helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
         --version "$KAFKA_CHART_VERSION_FINAL" \
         --namespace "$NAMESPACE" \
-        -f helm-openshift/values-kafka.yaml \
+        -f helm-charts/openshift/values-kafka.yaml \
         --wait
 }
 
@@ -352,7 +352,7 @@ install_data_plane() {
         PULL_SECRET="gcr-secret"
     fi
 
-    helm upgrade --install data-plane ./helm-openshift/data-plane \
+    helm upgrade --install data-plane ./helm-charts/openshift/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \

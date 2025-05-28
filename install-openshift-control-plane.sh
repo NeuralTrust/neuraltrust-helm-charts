@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-openshift/values.yaml"
+VALUES_FILE="helm-charts/openshift/values.yaml"
 
 # Parse command line arguments
 INSTALL_POSTGRESQL=false
@@ -239,7 +239,7 @@ install_control_plane() {
 
     # Install control plane components
     log_info "Installing control plane..."
-    helm upgrade --install $RELEASE_NAME ./helm-openshift/control-plane \
+    helm upgrade --install $RELEASE_NAME ./helm-charts/openshift/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --set controlPlane.imagePullSecrets="$PULL_SECRET" \
@@ -310,7 +310,7 @@ install_control_plane() {
             log_info "Updating app deployment with the fetched API host: $ACTUAL_API_HOST"
             # --reuse-values ensures all other configurations from the initial install are preserved.
             # We only override the specific value for the app's API URL.
-            helm upgrade $RELEASE_NAME ./helm-openshift/control-plane \
+            helm upgrade $RELEASE_NAME ./helm-charts/openshift/control-plane \
                 --namespace "$NAMESPACE" \
                 --reuse-values \
                 --set controlPlane.components.app.config.controlPlaneApiUrl="$ACTUAL_API_HOST" \
