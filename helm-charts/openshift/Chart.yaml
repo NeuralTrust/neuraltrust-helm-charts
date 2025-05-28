@@ -20,15 +20,3 @@ dependencies:
     repository: file://./data-plane
     tags:
       - data-plane
-
-  # Base chart dependencies
-  - name: kafka
-    version: "31.0.0"
-    repository: "file://../shared-charts/kafka"
-    tags:
-      - kafka-dependency
-  - name: clickhouse
-    version: "8.0.10"
-    repository: "file://../shared-charts/clickhouse"
-    tags:
-      - clickhouse-dependency

@@ -256,38 +256,26 @@ install_databases() {
     log_info "Using ClickHouse chart version: $CLICKHOUSE_CHART_VERSION_FINAL"
 
     # Install ClickHouse with backup configuration
-    helm upgrade --install clickhouse "$CLICKHOUSE_IMAGE_REPO_FINAL" \
-        --namespace "$NAMESPACE" \
-        --version "$CLICKHOUSE_CHART_VERSION_FINAL" \
-        --set auth.username=neuraltrust \
-        --set auth.password="$CLICKHOUSE_PASSWORD" \
-        --set shards=1 \
-        --set replicaCount=1 \
-        --set zookeeper.enabled=false \
-        --set persistence.size=100Gi \
-        --set resources.limits.memory=8Gi \
-        --set resources.requests.memory=4Gi \
-        --set resources.limits.cpu=4 \
-        --set resources.requests.cpu=2 \
-        --set logLevel=fatal \
-        --wait
+    # helm upgrade --install clickhouse "$CLICKHOUSE_IMAGE_REPO_FINAL" \
+    #     --namespace "$NAMESPACE" \
+    #     --version "$CLICKHOUSE_CHART_VERSION_FINAL" \
+    #     --set auth.username=neuraltrust \
+    #     --set auth.password="$CLICKHOUSE_PASSWORD" \
+    #     --set shards=1 \
+    #     --set replicaCount=1 \
+    #     --set zookeeper.enabled=false \
+    #     --set persistence.size=100Gi \
+    #     --set resources.limits.memory=8Gi \
+    #     --set resources.requests.memory=4Gi \
+    #     --set resources.limits.cpu=4 \
+    #     --set resources.requests.cpu=2 \
+    #     --set logLevel=fatal \
+    #     --wait
 
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
     log_info "Password: $CLICKHOUSE_PASSWORD"
+    export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
     log_info "Please save this password in a secure location"
-    
-    oc create secret generic clickhouse-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=CLICKHOUSE_USER="neuraltrust" \
-        --from-literal=CLICKHOUSE_DATABASE="neuraltrust" \
-        --from-literal=CLICKHOUSE_HOST="clickhouse.${NAMESPACE}.svc.cluster.local" \
-        --from-literal=CLICKHOUSE_PORT="8123" \
-        --dry-run=client -o yaml | oc apply -f -
-    
-    oc create configmap clickhouse-init-job \
-        --namespace "$NAMESPACE" \
-        --from-file=helm-charts/openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
-        --dry-run=client -o yaml | oc apply -f -
 }
 
 install_messaging() {
@@ -302,11 +290,11 @@ install_messaging() {
     log_info "Using Kafka chart version: $KAFKA_CHART_VERSION_FINAL"
 
     # Install Kafka
-    helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
-        --version "$KAFKA_CHART_VERSION_FINAL" \
-        --namespace "$NAMESPACE" \
-        -f helm-charts/openshift/values-kafka.yaml \
-        --wait
+    # helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
+    #     --version "$KAFKA_CHART_VERSION_FINAL" \
+    #     --namespace "$NAMESPACE" \
+    #     -f helm-charts/openshift/values-kafka.yaml \
+    #     --wait
 }
 
 # Function to install data plane components
@@ -378,6 +366,8 @@ install_data_plane() {
         --set clickhouse.backup.gcs.bucket="$GCS_BUCKET" \
         --set clickhouse.backup.gcs.accessKey="$GCS_ACCESS_KEY" \
         --set clickhouse.backup.gcs.secretKey="$GCS_SECRET_KEY" \
+        --set clickhouse.auth.username=neuraltrust \
+        --set clickhouse.auth.password="$CLICKHOUSE_PASSWORD" \
         --wait
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"

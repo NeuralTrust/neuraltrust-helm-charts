@@ -151,27 +151,27 @@ spec:
         - name: CLICKHOUSE_HOST
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_HOST
         - name: CLICKHOUSE_PORT
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_PORT
         - name: CLICKHOUSE_DATABASE
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_DATABASE
         - name: CLICKHOUSE_USER
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_USER
         - name: CLICKHOUSE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: clickhouse
+              name: {{ .Release.Name }}-clickhouse
               key: admin-password
         volumeMounts:
         - name: connector-scripts

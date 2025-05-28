@@ -47,24 +47,24 @@ spec:
         - name: CLICKHOUSE_HOST
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_HOST
         - name: CLICKHOUSE_PORT
           value: "8123"
         - name: CLICKHOUSE_USER
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_USER
         - name: CLICKHOUSE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: clickhouse
+              name: {{ .Release.Name }}-clickhouse
               key: admin-password
         - name: CLICKHOUSE_DATABASE
           valueFrom:
             secretKeyRef:
-              name: clickhouse-secrets
+              name: {{ .Release.Name }}-clickhouse-secrets
               key: CLICKHOUSE_DATABASE
         command: ["python", "-u", "src/listen.py"]
         resources:

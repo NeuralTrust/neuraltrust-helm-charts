@@ -36,7 +36,7 @@ spec:
                 - name: CLICKHOUSE_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: clickhouse
+                      name: {{ .Release.Name }}-clickhouse
                       key: admin-password
           restartPolicy: OnFailure
 {{- end }}

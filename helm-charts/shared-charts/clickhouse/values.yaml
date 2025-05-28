@@ -90,9 +90,9 @@ diagnosticMode:
 ## @param image.debug Enable ClickHouse image debug mode
 ##
 image:
-  registry: docker.io
-  repository: bitnami/clickhouse
-  tag: 25.3.2-debian-12-r3
+  registry: ""
+  repository: neuraltrust/clickhouse-server
+  tag: 25.3.2
   digest: ""
   ## Specify a imagePullPolicy
   ## ref: http://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
@@ -114,11 +114,11 @@ image:
 clusterName: default
 ## @param shards Number of ClickHouse shards to deploy
 ##
-shards: 2
+shards: 1
 ## @param replicaCount Number of ClickHouse replicas per shard to deploy
 ## if keeper enable, same as keeper count, keeper cluster by shards.
 ##
-replicaCount: 3
+replicaCount: 1
 ## @param distributeReplicasByZone Schedules replicas of the same shard to different availability zones
 ##
 distributeReplicasByZone: false
@@ -215,7 +215,13 @@ resourcesPreset: "small"
 ##     cpu: 3
 ##     memory: 1024Mi
 ##
-resources: {}
+resources:
+  requests:
+    cpu: 2
+    memory: 4Gi
+  limits:
+    cpu: 4
+    memory: 8Gi
 ## Configure Pods Security Context
 ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
 ## @param podSecurityContext.enabled Enabled ClickHouse pods' Security Context
@@ -264,13 +270,13 @@ containerSecurityContext:
 ## @param auth.existingSecretKey Name of the key inside the existing secret
 ##
 auth:
-  username: default
+  username: neuraltrust
   password: ""
   existingSecret: ""
   existingSecretKey: ""
 ## @param logLevel Logging level
 ##
-logLevel: information
+logLevel: fatal
 ## @section ClickHouse keeper configuration parameters
 ## @param keeper.enabled Deploy ClickHouse keeper. Support is experimental.
 ##
@@ -966,7 +972,7 @@ persistence:
     - ReadWriteOnce
   ## @param persistence.size Size of data volume
   ##
-  size: 8Gi
+  size: 100Gi
   ## @param persistence.selector Selector to match an existing Persistent Volume for ClickHouse data PVC
   ## If set, the PVC can't have a PV dynamically provisioned for it
   ## E.g.
@@ -1149,7 +1155,7 @@ externalZookeeper:
 ## @param zookeeper.service.ports.client Zookeeper client port
 ##
 zookeeper:
-  enabled: true
+  enabled: false
   replicaCount: 3
   service:
     ports:

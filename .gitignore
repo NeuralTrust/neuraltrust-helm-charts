@@ -4,6 +4,7 @@ clients/
 !.env.control-plane.example
 !.env.data-plane.example
 gcr-keys.json
+Chart.lock
 
 # Credentials
 *.json
