@@ -1,0 +1,13 @@
+controlPlane:
+  secrets:
+    controlPlaneJWTSecret: ""
+    controlPlaneJWTSecretName: "control-plane-jwt-secret"
+
+postgresql:
+  secrets:
+    name: "postgresql-secrets"
+    user: "postgres"
+    password: ""
+    database: "neuraltrust"
+    host: ""
+    port: "5432" 

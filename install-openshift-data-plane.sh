@@ -276,18 +276,6 @@ install_databases() {
     log_info "Password: $CLICKHOUSE_PASSWORD"
     log_info "Please save this password in a secure location"
     
-    oc create secret generic clickhouse-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=CLICKHOUSE_USER="neuraltrust" \
-        --from-literal=CLICKHOUSE_DATABASE="neuraltrust" \
-        --from-literal=CLICKHOUSE_HOST="clickhouse.${NAMESPACE}.svc.cluster.local" \
-        --from-literal=CLICKHOUSE_PORT="8123" \
-        --dry-run=client -o yaml | oc apply -f -
-    
-    oc create configmap clickhouse-init-job \
-        --namespace "$NAMESPACE" \
-        --from-file=helm-charts/openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
-        --dry-run=client -o yaml | oc apply -f -
 }
 
 install_messaging() {

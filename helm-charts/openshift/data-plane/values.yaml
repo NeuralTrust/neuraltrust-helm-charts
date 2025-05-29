@@ -1,0 +1,9 @@
+clickhouse:
+  user: "neuraltrust"
+  database: "neuraltrust"
+  host: "clickhouse"
+  port: "8123"
+  secrets:
+    name: "clickhouse-secrets"
+  configmap:
+    name: "clickhouse-init-job" 

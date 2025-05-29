@@ -26,6 +26,7 @@ spec:
             echo "POSTGRES_HOST: $POSTGRES_HOST"
             echo "POSTGRES_PORT: $POSTGRES_PORT"
             echo "POSTGRES_DATABASE: $POSTGRES_DATABASE"
+            echo "DATABASE_URL: $DATABASE_URL"
             
             # Check if PostgreSQL is ready
             until nc -z -w 2 $POSTGRES_HOST $POSTGRES_PORT; do
@@ -80,10 +81,16 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
-        - name: POSTGRES_PRISMA_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
         - name: DATABASE_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: DATABASE_URL
+        - name: POSTGRES_PRISMA_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PRISMA_URL
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -138,8 +145,16 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: DATABASE_URL
         - name: POSTGRES_PRISMA_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PRISMA_URL
         - name: RESEND_API_KEY
           valueFrom:
             secretKeyRef:

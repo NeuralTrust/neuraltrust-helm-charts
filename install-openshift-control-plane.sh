@@ -120,46 +120,18 @@ create_namespace_if_not_exists() {
 create_control_plane_secrets() {
     log_info "Creating control plane secrets..."
     
-    oc create secret generic control-plane-jwt-secret \
-        --namespace "$NAMESPACE" \
-        --from-literal=CONTROL_PLANE_JWT_SECRET="$CONTROL_PLANE_JWT_SECRET" \
-        --dry-run=client -o yaml | oc apply -f -
-    
     # Create PostgreSQL secrets if needed
     if [ "$INSTALL_POSTGRESQL" = true ]; then
         log_info "Installing PostgreSQL in $NAMESPACE namespace..."
-        # Generate a random password if not provided
-        if [ -z "$POSTGRES_PASSWORD" ]; then
-            POSTGRES_PASSWORD=$(openssl rand -base64 12)
-            log_info "Generated random PostgreSQL password"
-        fi
         
-        oc create secret generic postgresql-secrets \
-            --namespace "$NAMESPACE" \
-            --from-literal=POSTGRES_USER="${POSTGRES_USER:-postgres}" \
-            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
-            --from-literal=POSTGRES_HOST="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local" \
-            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
-            --dry-run=client -o yaml | oc apply -f -
-            
-        log_info "PostgreSQL credentials:"
+        log_info "PostgreSQL credentials will be configured via Helm chart:"
         log_info "  Host: ${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
         log_info "  Port: ${POSTGRES_PORT:-5432}"
         log_info "  Database: ${POSTGRES_DB:-neuraltrust}"
         log_info "  User: ${POSTGRES_USER:-postgres}"
-        log_info "  Password: $POSTGRES_PASSWORD"
     else
-        log_info "Skipping PostgreSQL installation as requested"
-        # Create the PostgreSQL secrets from provided environment variables
-        oc create secret generic postgresql-secrets \
-            --namespace "$NAMESPACE" \
-            --from-literal=POSTGRES_HOST="$POSTGRES_HOST" \
-            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
-            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
-            --from-literal=POSTGRES_USER="$POSTGRES_USER" \
-            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            --dry-run=client -o yaml | oc apply -f -
+        log_info "Using external PostgreSQL database"
+        log_info "PostgreSQL credentials will be configured via Helm chart"
     fi
     
     # Create OpenAI API key secret
@@ -236,13 +208,37 @@ install_control_plane() {
         PULL_SECRET="gcr-secret"
     fi
 
-
     # Install control plane components
     log_info "Installing control plane..."
+    
+    # Set PostgreSQL configuration based on installation type
+    if [ "$INSTALL_POSTGRESQL" = true ]; then
+        # Generate a random password if not provided
+        if [ -z "$POSTGRES_PASSWORD" ]; then
+            POSTGRES_PASSWORD=$(openssl rand -base64 12)
+            log_info "Generated random PostgreSQL password: $POSTGRES_PASSWORD"
+        fi
+        POSTGRES_HOST_FINAL="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
+        POSTGRES_USER_FINAL="${POSTGRES_USER:-postgres}"
+        POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
+        POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
+    else
+        POSTGRES_HOST_FINAL="$POSTGRES_HOST"
+        POSTGRES_USER_FINAL="$POSTGRES_USER"
+        POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
+        POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
+    fi
+    
     helm upgrade --install $RELEASE_NAME ./helm-charts/openshift/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --set controlPlane.imagePullSecrets="$PULL_SECRET" \
+        --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
+        --set postgresql.secrets.user="$POSTGRES_USER_FINAL" \
+        --set postgresql.secrets.password="$POSTGRES_PASSWORD" \
+        --set postgresql.secrets.database="$POSTGRES_DB_FINAL" \
+        --set postgresql.secrets.host="$POSTGRES_HOST_FINAL" \
+        --set postgresql.secrets.port="$POSTGRES_PORT_FINAL" \
         --set global.postgresql.enabled="$INSTALL_POSTGRESQL" \
         --set controlPlane.components.api.host="$CONTROL_PLANE_API_URL" \
         --set controlPlane.components.api.image.repository="$CONTROL_PLANE_API_IMAGE_REPOSITORY" \

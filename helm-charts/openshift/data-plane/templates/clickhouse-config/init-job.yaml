@@ -59,7 +59,7 @@ spec:
       volumes:
         - name: init-db
           configMap:
-            name: {{ .Release.Name }}-clickhouse-init
+            name: {{ .Values.clickhouse.configmap.name | default "clickhouse-init-job" }}
             items:
               - key: init-db.sql
                 path: init-db.sql 
