@@ -134,12 +134,6 @@ create_control_plane_secrets() {
         log_info "PostgreSQL credentials will be configured via Helm chart"
     fi
     
-    # Create OpenAI API key secret
-    oc create secret generic openai-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-        --dry-run=client -o yaml | oc apply -f -
-
     if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         # Create registry credentials secret
         log_info "Please provide your GCR service account key (JSON format)"
@@ -234,6 +228,7 @@ install_control_plane() {
         -f "$VALUES_FILE" \
         --set controlPlane.imagePullSecrets="$PULL_SECRET" \
         --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
+        --set openai.secrets.apiKey="$OPENAI_API_KEY" \
         --set postgresql.secrets.user="$POSTGRES_USER_FINAL" \
         --set postgresql.secrets.password="$POSTGRES_PASSWORD" \
         --set postgresql.secrets.database="$POSTGRES_DB_FINAL" \
