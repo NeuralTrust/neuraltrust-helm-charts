@@ -1,9 +1,95 @@
+# Global configuration
+global:
+  postgresql:
+    enabled: true
+
+# Control Plane configuration
 controlPlane:
+  imagePullSecrets: "gcr-secret"
+  
   secrets:
     controlPlaneJWTSecret: ""
-    controlPlaneJWTSecretName: "control-plane-jwt-secret"
+  
+  components:
+    api:
+      replicas: 2
+      image:
+        repository: "your-registry/control-plane-api"
+        tag: "latest"
+        pullPolicy: "IfNotPresent"
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+    
+    app:
+      replicaCount: 2
+      image:
+        repository: "your-registry/control-plane-app"
+        tag: "latest"
+        pullPolicy: "IfNotPresent"
+      host: "app.example.com"
+      config:
+        port: "3000"
+        nodeEnv: "production"
+        apiUrl: "api.example.com"
+        controlPlaneApiUrl: "api.example.com"
+        dataPlaneApiUrl: "data-api.example.com"
+        openaiModel: "gpt-4"
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+      initContainer:
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+    
+    scheduler:
+      replicas: 1
+      image:
+        repository: "your-registry/control-plane-scheduler"
+        tag: "latest"
+        pullPolicy: "IfNotPresent"
+      host: "scheduler.example.com"
+      env:
+        dataPlaneApiUrl: "data-api.example.com"
+        controlPlaneApiUrl: "api.example.com"
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "200m"
 
+# PostgreSQL configuration
 postgresql:
+  imagePullSecrets: []
+  image:
+    repository: "postgres"
+    tag: "14"
+    pullPolicy: "IfNotPresent"
+  persistence:
+    enabled: true
+    size: "10Gi"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
   secrets:
     name: "postgresql-secrets"
     user: "postgres"
@@ -12,7 +98,23 @@ postgresql:
     host: ""
     port: "5432"
 
+# OpenAI configuration
 openai:
   secrets:
-    name: "openai-secrets"
-    apiKey: "" 
+    apiKey: ""
+
+# Resend configuration (for email services)
+resend:
+  apiKey: ""
+  alertSender: "alerts@example.com"
+  inviteSender: "invites@example.com"
+
+# Clerk configuration (for authentication)
+clerk:
+  publishableKey: ""
+  secretKey: ""
+  webhookSecretSessions: ""
+  webhookSecretUsers: ""
+  authorizationCallbackUrl: "https://app.example.com/auth/callback"
+  signInUrl: "https://app.example.com/sign-in"
+  signUpUrl: "https://app.example.com/sign-up" 

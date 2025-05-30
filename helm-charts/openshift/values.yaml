@@ -80,11 +80,11 @@ controlPlane:
   components:
     scheduler:
       enabled: true
-      host: "${CONTROL_PLANE_SCHEDULER_URL}"
+      host: ""
       image:
         repository: "${CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY}"
         tag: "${CONTROL_PLANE_SCHEDULER_IMAGE_TAG}"
-        pullPolicy: "${CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY}"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
       env:
@@ -96,10 +96,10 @@ controlPlane:
       image:
         repository: "${API_IMAGE_REPOSITORY}"
         tag: "${API_IMAGE_TAG}"
-        pullPolicy: "${API_IMAGE_PULL_POLICY}"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${CONTROL_PLANE_API_URL}"
+      host: ""
       secrets:
         controlPlaneJWTSecret: "${CONTROL_PLANE_JWT_SECRET}"
       resources:
@@ -115,15 +115,15 @@ controlPlane:
       image:
         repository: "${WEBAPP_IMAGE_REPOSITORY}"
         tag: "${WEBAPP_IMAGE_TAG}"
-        pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${CONTROL_PLANE_APP_URL}"
-      secondaryHost: "${CONTROL_PLANE_APP_SECONDARY_URL}"
+      host: ""
+      secondaryHost: ""
       config:
         nodeEnv: production
         port: 3000
-        controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
+        controlPlaneApiUrl: ""
         dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
         openaiModel: "${OPENAI_MODEL}"
       resources:
@@ -153,7 +153,7 @@ dataPlane:
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
-      host: "${DATA_PLANE_API_URL}"
+      host: ""
       accessMode: ReadWriteOnce
       huggingfaceToken: "${HUGGINGFACE_TOKEN}"
       storage: 10Gi

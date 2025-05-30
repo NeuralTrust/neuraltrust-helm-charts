@@ -6,4 +6,135 @@ clickhouse:
   secrets:
     name: "clickhouse-secrets"
   configmap:
-    name: "clickhouse-init-job" 
+    name: "clickhouse-init-job"
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "200m"
+  image:
+    repository: "clickhouse/clickhouse-server"
+    tag: "latest"
+    pullPolicy: "IfNotPresent"
+  backup:
+    enabled: false
+    type: "s3"  # Default backup type (s3 or gcs)
+    image:
+      repository: "curlimages/curl"
+      tag: "latest"
+    s3:
+      bucket: ""  # To be set via --set or environment
+      region: "us-west-2"
+      endpoint: ""  # For custom S3 endpoints
+      # accessKey and secretKey should be set via --set (sensitive)
+    gcs:
+      bucket: ""  # To be set via --set or environment
+      # accessKey and secretKey should be set via --set (sensitive)
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "100m"
+
+# Global configuration
+global:
+  kafka:
+    connect:
+      image: "confluentinc/cp-kafka-connect:latest"
+    ui:
+      image: "provectuslabs/kafka-ui:latest"
+
+# Data Plane specific configurations
+dataPlane:
+  imagePullSecrets: "gcr-secret"  # Default for OpenShift with private registry
+  
+  secrets:
+    dataPlaneJWTSecretName: "data-plane-jwt-secret"
+    openaiApiKeySecretName: "openai-secrets"
+    googleApiKeySecretName: "google-secrets"
+    resendApiKeySecretName: "resend-secrets"
+    # Actual secret values should be set via --set (sensitive data)
+    dataPlaneJWTSecret: ""
+    openaiApiKey: ""
+    googleApiKey: ""
+    resendApiKey: ""
+  
+  components:
+    api:
+      replicas: 2
+      host: ""  # To be set via environment-specific values or --set
+      image:
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/data-plane-api"
+        tag: "latest"
+        pullPolicy: "Always"
+      huggingfaceToken: ""  # To be set via --set (sensitive)
+      trustTestConfig:
+        evaluator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+        question_generator:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.5
+        embeddings:
+          provider: "openai"
+          model: "text-embedding-3-small"
+        topic_summarizer:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "1000m"
+    
+    worker:
+      image:
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/data-plane-worker"
+        tag: "latest"
+        pullPolicy: "Always"
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "1000m"
+    
+    kafka:
+      imagePullSecrets: []
+      connect:
+        replicas: 1
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "1000m"
+      ui:
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+    
+    connectorsJob:
+      image: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/kafka-connectors"
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "200m" 

@@ -106,6 +106,38 @@ prompt_for_namespace() {
     log_info "Using namespace: $NAMESPACE"
 }
 
+# Function to prompt for mandatory DATA_PLANE_API_URL
+prompt_for_data_plane_api_url() {
+    if [ -z "$DATA_PLANE_API_URL" ]; then
+        log_info "DATA_PLANE_API_URL is required for the control plane to communicate with the data plane."
+        while [ -z "$DATA_PLANE_API_URL" ]; do
+            read -p "Enter the Data Plane API URL (e.g., data-api.example.com): " DATA_PLANE_API_URL
+            if [ -z "$DATA_PLANE_API_URL" ]; then
+                log_error "DATA_PLANE_API_URL cannot be empty. Please provide a valid URL."
+            fi
+        done
+    fi
+    log_info "Using Data Plane API URL: $DATA_PLANE_API_URL"
+}
+
+# Function to prompt for mandatory CONTROL_PLANE_JWT_SECRET
+prompt_for_control_plane_jwt_secret() {
+    if [ -z "$CONTROL_PLANE_JWT_SECRET" ]; then
+        log_info "CONTROL_PLANE_JWT_SECRET is required for secure communication between control plane and data plane."
+        log_info "This MUST be the same JWT secret used by your data plane installation."
+        
+        while [ -z "$CONTROL_PLANE_JWT_SECRET" ]; do
+            read -p "Enter the Control Plane JWT Secret (same as data plane): " CONTROL_PLANE_JWT_SECRET
+            if [ -z "$CONTROL_PLANE_JWT_SECRET" ]; then
+                log_error "JWT Secret cannot be empty. Please provide the same JWT secret used by your data plane."
+            fi
+        done
+        log_info "Using provided JWT secret for control plane authentication."
+    else
+        log_info "Using Control Plane JWT Secret from environment variables."
+    fi
+}
+
 # Function to create namespace if it doesn't exist
 create_namespace_if_not_exists() {
     if ! oc get namespace "$NAMESPACE" &> /dev/null; then
@@ -117,22 +149,7 @@ create_namespace_if_not_exists() {
     fi
 }
 
-create_control_plane_secrets() {
-    log_info "Creating control plane secrets..."
-    
-    # Create PostgreSQL secrets if needed
-    if [ "$INSTALL_POSTGRESQL" = true ]; then
-        log_info "Installing PostgreSQL in $NAMESPACE namespace..."
-        
-        log_info "PostgreSQL credentials will be configured via Helm chart:"
-        log_info "  Host: ${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
-        log_info "  Port: ${POSTGRES_PORT:-5432}"
-        log_info "  Database: ${POSTGRES_DB:-neuraltrust}"
-        log_info "  User: ${POSTGRES_USER:-postgres}"
-    else
-        log_info "Using external PostgreSQL database"
-        log_info "PostgreSQL credentials will be configured via Helm chart"
-    fi
+create_gcr_secret() {
     
     if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         # Create registry credentials secret
@@ -195,7 +212,7 @@ install_control_plane() {
     create_namespace_if_not_exists
 
     # Create required secrets
-    create_control_plane_secrets
+    create_gcr_secret
 
     PULL_SECRET=""
     if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
@@ -207,7 +224,7 @@ install_control_plane() {
     
     # Set PostgreSQL configuration based on installation type
     if [ "$INSTALL_POSTGRESQL" = true ]; then
-        # Generate a random password if not provided
+        echo "Installing PostgreSQL in $NAMESPACE namespace..."
         if [ -z "$POSTGRES_PASSWORD" ]; then
             POSTGRES_PASSWORD=$(openssl rand -base64 12)
             log_info "Generated random PostgreSQL password: $POSTGRES_PASSWORD"
@@ -217,16 +234,68 @@ install_control_plane() {
         POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
         POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
     else
+        echo "Using external PostgreSQL database"
         POSTGRES_HOST_FINAL="$POSTGRES_HOST"
         POSTGRES_USER_FINAL="$POSTGRES_USER"
         POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
         POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
     fi
     
+    # Build optional configuration overrides for non-sensitive data
+    OPTIONAL_OVERRIDES=()
+    
+    # Add image pull secrets if specified
+    if [ -n "$PULL_SECRET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.imagePullSecrets=$PULL_SECRET")
+    fi
+    
+    # Add API host if specified
+    if [ -n "$CONTROL_PLANE_API_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.host=$CONTROL_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.config.controlPlaneApiUrl=$CONTROL_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.env.controlPlaneApiUrl=$CONTROL_PLANE_API_URL")
+    fi
+    
+    # Add app configuration if specified
+    if [ -n "$CONTROL_PLANE_APP_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.host=$CONTROL_PLANE_APP_URL")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_SECONDARY_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.secondaryHost=$CONTROL_PLANE_APP_SECONDARY_URL")
+    fi
+    if [ -n "$OPENAI_MODEL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.config.openaiModel=$OPENAI_MODEL")
+    fi
+    
+    # Add scheduler configuration if specified
+    if [ -n "$CONTROL_PLANE_SCHEDULER_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.host=$CONTROL_PLANE_SCHEDULER_URL")
+    fi
+    
+    # Add image overrides if specified (for development/testing)
+    if [ -n "$CONTROL_PLANE_API_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.image.repository=$CONTROL_PLANE_API_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_API_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.image.tag=$CONTROL_PLANE_API_IMAGE_TAG")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.image.repository=$CONTROL_PLANE_APP_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.image.tag=$CONTROL_PLANE_APP_IMAGE_TAG")
+    fi
+    if [ -n "$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.image.repository=$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.image.tag=$CONTROL_PLANE_SCHEDULER_IMAGE_TAG")
+    fi
+    
     helm upgrade --install $RELEASE_NAME ./helm-charts/openshift/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
-        --set controlPlane.imagePullSecrets="$PULL_SECRET" \
+        --timeout 15m \
         --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
         --set openai.secrets.apiKey="$OPENAI_API_KEY" \
         --set postgresql.secrets.user="$POSTGRES_USER_FINAL" \
@@ -235,36 +304,20 @@ install_control_plane() {
         --set postgresql.secrets.host="$POSTGRES_HOST_FINAL" \
         --set postgresql.secrets.port="$POSTGRES_PORT_FINAL" \
         --set global.postgresql.enabled="$INSTALL_POSTGRESQL" \
-        --set controlPlane.components.api.host="$CONTROL_PLANE_API_URL" \
-        --set controlPlane.components.api.image.repository="$CONTROL_PLANE_API_IMAGE_REPOSITORY" \
-        --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \
-        --set controlPlane.components.api.image.pullPolicy="$CONTROL_PLANE_API_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.app.host="$CONTROL_PLANE_APP_URL" \
-        --set controlPlane.components.app.secondaryHost="$CONTROL_PLANE_APP_SECONDARY_URL" \
-        --set controlPlane.components.app.image.repository="$CONTROL_PLANE_APP_IMAGE_REPOSITORY" \
-        --set controlPlane.components.app.image.tag="$CONTROL_PLANE_APP_IMAGE_TAG" \
-        --set controlPlane.components.app.image.pullPolicy="$CONTROL_PLANE_APP_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.app.config.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.components.app.config.openaiModel="$OPENAI_MODEL" \
         --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.components.scheduler.env.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
-        --set controlPlane.components.scheduler.image.repository="$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" \
-        --set controlPlane.components.scheduler.image.tag="$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" \
-        --set controlPlane.components.scheduler.image.pullPolicy="$CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.scheduler.host="$CONTROL_PLANE_SCHEDULER_URL" \
-        --set controlPlane.components.global.resend.apiKey="$RESEND_API_KEY" \
-        --set controlPlane.components.global.resend.alertSender="$RESEND_ALERT_SENDER" \
-        --set controlPlane.components.global.resend.inviteSender="$RESEND_INVITE_SENDER" \
-        --set controlPlane.components.global.clerk.publishableKey="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" \
-        --set controlPlane.components.global.clerk.secretKey="$CLERK_SECRET_KEY" \
-        --set controlPlane.components.global.clerk.webhookSecretSessions="$CLERK_WEBHOOK_SECRET_SESSIONS" \
-        --set controlPlane.components.global.clerk.webhookSecretUsers="$CLERK_WEBHOOK_SECRET_USERS" \
-        --set controlPlane.components.global.clerk.authorizationCallbackUrl="$GITHUB_AUTHORIZATION_CALLBACK_URL" \
-        --set controlPlane.components.global.clerk.signInUrl="$NEXT_PUBLIC_CLERK_SIGN_IN_URL" \
-        --set controlPlane.components.global.clerk.signUpUrl="$NEXT_PUBLIC_CLERK_SIGN_UP_URL" \
+        --set resend.apiKey="${RESEND_API_KEY:-}" \
+        --set resend.alertSender="${RESEND_ALERT_SENDER:-alerts@example.com}" \
+        --set resend.inviteSender="${RESEND_INVITE_SENDER:-invites@example.com}" \
+        --set clerk.publishableKey="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" \
+        --set clerk.secretKey="${CLERK_SECRET_KEY:-}" \
+        --set clerk.webhookSecretSessions="${CLERK_WEBHOOK_SECRET_SESSIONS:-}" \
+        --set clerk.webhookSecretUsers="${CLERK_WEBHOOK_SECRET_USERS:-}" \
+        --set clerk.authorizationCallbackUrl="${GITHUB_AUTHORIZATION_CALLBACK_URL:-https://app.example.com/auth/callback}" \
+        --set clerk.signInUrl="${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-https://app.example.com/sign-in}" \
+        --set clerk.signUpUrl="${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-https://app.example.com/sign-up}" \
+        "${OPTIONAL_OVERRIDES[@]}" \
         $ADDITIONAL_VALUES \
-        --timeout 15m \
         --wait
 
     # If CONTROL_PLANE_API_URL was initially empty (meaning OpenShift generates the API host),
@@ -325,6 +378,63 @@ install_control_plane() {
         log_info "No dynamic update needed for controlPlane.components.app.config.controlPlaneApiUrl based on a generated route host."
     fi
 
+    # If CONTROL_PLANE_SCHEDULER_URL was initially empty (meaning OpenShift generates the scheduler host),
+    # we need to fetch this generated host and update the app's configuration.
+    # The $CONTROL_PLANE_SCHEDULER_URL variable holds its value from the sourced .env file.
+    if [ -z "$CONTROL_PLANE_SCHEDULER_URL" ]; then
+        log_info "CONTROL_PLANE_SCHEDULER_URL was empty. Attempting to fetch the generated scheduler route host..."
+        # Assuming the scheduler route is named based on the release name and a suffix '-scheduler-route'
+        SCHEDULER_ROUTE_NAME="$RELEASE_NAME-scheduler-route"
+        
+        ACTUAL_SCHEDULER_HOST=""
+        RETRY_COUNT=0
+        MAX_RETRIES=12  # Total wait time: MAX_RETRIES * RETRY_DELAY (e.g., 12 * 10s = 120s)
+        RETRY_DELAY=10 # Seconds
+
+        log_info "Waiting for scheduler route '$SCHEDULER_ROUTE_NAME' in namespace '$NAMESPACE' to be assigned a host..."
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            # Fetch the host. Use 2>/dev/null to suppress errors if route not found yet.
+            RAW_OC_GET_ROUTE=$(oc get route "$SCHEDULER_ROUTE_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null)
+            
+            # Check if oc command was successful and output is not empty
+            if [ $? -eq 0 ] && [ -n "$RAW_OC_GET_ROUTE" ]; then
+                ACTUAL_SCHEDULER_HOST=$RAW_OC_GET_ROUTE
+                log_info "Fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
+                break
+            else
+                log_info "Scheduler route host not yet available or route not found. Retrying in $RETRY_DELAY seconds... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
+                sleep $RETRY_DELAY
+                RETRY_COUNT=$((RETRY_COUNT+1))
+            fi
+        done
+
+        if [ -n "$ACTUAL_SCHEDULER_HOST" ]; then
+            log_info "Updating app deployment with the fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
+            # --reuse-values ensures all other configurations from the initial install are preserved.
+            # We only override the specific value for the app's scheduler URL.
+            helm upgrade $RELEASE_NAME ./helm-charts/openshift/control-plane \
+                --namespace "$NAMESPACE" \
+                --reuse-values \
+                --set controlPlane.components.scheduler.host="$ACTUAL_SCHEDULER_HOST" \
+                --timeout 5m \
+                --wait
+            
+            if [ $? -eq 0 ]; then
+                log_info "App deployment successfully updated to use scheduler host: $ACTUAL_SCHEDULER_HOST"
+            else
+                log_error "Failed to update app deployment with the new scheduler host '$ACTUAL_SCHEDULER_HOST'. Check Helm status for release '$RELEASE_NAME'."
+            fi
+        else
+            log_error "Failed to fetch scheduler route host after $MAX_RETRIES attempts for route '$SCHEDULER_ROUTE_NAME'."
+            log_warn "The app's CONTROL_PLANE_SCHEDULER_URL (controlPlane.components.scheduler.host) might be incorrect."
+            log_warn "It was initially configured with an empty value, resulting in 'https://' and was not updated."
+            log_warn "Manual intervention might be required to set it to the correct scheduler host."
+        fi
+    else
+        log_info "CONTROL_PLANE_SCHEDULER_URL was set to '$CONTROL_PLANE_SCHEDULER_URL'. The app deployment will use this value directly."
+        log_info "No dynamic update needed for controlPlane.components.scheduler.host based on a generated route host."
+    fi
+
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"
 }
 
@@ -345,6 +455,8 @@ check_prerequisites() {
 main() {
     verify_environment "$ENVIRONMENT"
     prompt_for_namespace
+    prompt_for_data_plane_api_url
+    prompt_for_control_plane_jwt_secret
     check_prerequisites
     install_control_plane
 }

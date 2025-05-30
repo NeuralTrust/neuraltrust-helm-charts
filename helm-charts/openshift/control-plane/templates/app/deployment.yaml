@@ -94,15 +94,17 @@ spec:
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
           value: "https://{{ .Values.controlPlane.components.app.config.apiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: data-plane-jwt-secret
-              key: DATA_PLANE_JWT_SECRET
+              name: {{ .Release.Name }}-secrets
+              key: CONTROL_PLANE_JWT_SECRET
+        resources:
+          {{- toYaml .Values.controlPlane.components.app.initContainer.resources | nindent 10 }}
       {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
         - name: gcr-secret
@@ -160,12 +162,12 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-api-key
-        - name: SENDER
+        - name: RESEND_SENDER
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: resend-invite-sender
-        - name: CLERK_PUBLISHABLE_KEY
+              key: resend-alert-sender
+        - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
@@ -205,7 +207,7 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openai-secrets
+              name: {{ .Release.Name }}-secrets
               key: OPENAI_API_KEY
         - name: OPENAI_MODEL
           value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
@@ -214,7 +216,7 @@ spec:
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
           value: "https://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"

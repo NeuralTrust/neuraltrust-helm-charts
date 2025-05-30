@@ -38,5 +38,7 @@ spec:
                     secretKeyRef:
                       name: clickhouse
                       key: admin-password
+              resources:
+                {{- toYaml .Values.clickhouse.backup.resources | nindent 16 }}
           restartPolicy: OnFailure
 {{- end }}

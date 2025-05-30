@@ -59,10 +59,10 @@ spec:
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openai-secrets
+              name: {{ .Release.Name }}-secrets
               key: OPENAI_API_KEY

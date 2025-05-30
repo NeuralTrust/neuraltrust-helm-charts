@@ -255,21 +255,12 @@ install_databases() {
     CLICKHOUSE_CHART_VERSION_FINAL="${CLICKHOUSE_VERSION:-8.0.10}"
     log_info "Using ClickHouse chart version: $CLICKHOUSE_CHART_VERSION_FINAL"
 
-    # Install ClickHouse with backup configuration
+    # Install ClickHouse with configuration from values file and only password via --set
     helm upgrade --install clickhouse "$CLICKHOUSE_IMAGE_REPO_FINAL" \
         --namespace "$NAMESPACE" \
         --version "$CLICKHOUSE_CHART_VERSION_FINAL" \
-        --set auth.username=neuraltrust \
+        -f helm-charts/openshift/values-clickhouse.yaml \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
-        --set shards=1 \
-        --set replicaCount=1 \
-        --set zookeeper.enabled=false \
-        --set persistence.size=100Gi \
-        --set resources.limits.memory=8Gi \
-        --set resources.requests.memory=4Gi \
-        --set resources.limits.cpu=4 \
-        --set resources.requests.cpu=2 \
-        --set logLevel=fatal \
         --wait
 
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
@@ -315,9 +306,6 @@ install_data_plane() {
     validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
 
-    # Wait a moment for the ClusterIssuer to be ready
-    sleep 10
-
     # Create required secrets
     create_data_plane_secrets
 
@@ -340,32 +328,60 @@ install_data_plane() {
         PULL_SECRET="gcr-secret"
     fi
 
+    # Build optional configuration overrides for non-sensitive data
+    OPTIONAL_OVERRIDES=()
+    
+    # Add API host if specified
+    if [ -n "$DATA_PLANE_API_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.host=$DATA_PLANE_API_URL")
+    fi
+    
+    # Add backup configuration if specified
+    if [ -n "$CLICKHOUSE_BACKUP_TYPE" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
+    fi
+    if [ -n "$S3_BUCKET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.bucket=$S3_BUCKET")
+    fi
+    if [ -n "$S3_REGION" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.region=$S3_REGION")
+    fi
+    if [ -n "$S3_ENDPOINT" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
+    fi
+    if [ -n "$GCS_BUCKET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.gcs.bucket=$GCS_BUCKET")
+    fi
+    
+    # Add image overrides if specified (for development/testing)
+    if [ -n "$DATA_PLANE_API_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.image.repository=$DATA_PLANE_API_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$DATA_PLANE_API_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.image.tag=$DATA_PLANE_API_IMAGE_TAG")
+    fi
+    if [ -n "$WORKER_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.worker.image.repository=$WORKER_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$WORKER_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.worker.image.tag=$WORKER_IMAGE_TAG")
+    fi
+
     helm upgrade --install data-plane ./helm-charts/openshift/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
-        --set dataPlane.components.api.host=$FINAL_DATA_PLANE_API_URL \
-        --set dataPlane.components.api.image.repository="$DATA_PLANE_API_IMAGE_REPOSITORY" \
-        --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
-        --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
         --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
         --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-        --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
-        --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
-        --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
-        --set clickhouse.backup.type="${CLICKHOUSE_BACKUP_TYPE:-s3}" \
-        --set clickhouse.backup.s3.bucket="$S3_BUCKET" \
-        --set clickhouse.backup.s3.region="$S3_REGION" \
-        --set clickhouse.backup.s3.accessKey="$S3_ACCESS_KEY" \
-        --set clickhouse.backup.s3.secretKey="$S3_SECRET_KEY" \
-        --set clickhouse.backup.s3.endpoint="$S3_ENDPOINT" \
-        --set clickhouse.backup.gcs.bucket="$GCS_BUCKET" \
-        --set clickhouse.backup.gcs.accessKey="$GCS_ACCESS_KEY" \
-        --set clickhouse.backup.gcs.secretKey="$GCS_SECRET_KEY" \
+        --set clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
+        --set clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
+        --set clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
+        --set clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
+        "${OPTIONAL_OVERRIDES[@]}" \
         --wait
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"

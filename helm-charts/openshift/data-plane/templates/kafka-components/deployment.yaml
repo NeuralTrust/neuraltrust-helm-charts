@@ -69,12 +69,7 @@ spec:
             - name: CONNECT_CONSUMER_DEFAULT_PARTITIONS
               value: "3"
           resources:
-            requests:
-              cpu: 500m
-              memory: 2Gi
-            limits:
-              cpu: 1000m
-              memory: 4Gi
+            {{- toYaml .Values.dataPlane.components.kafka.connect.resources | nindent 12 }}
           lifecycle:
             postStart:
               exec:
@@ -114,12 +109,7 @@ spec:
           value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
         imagePullPolicy: Always
         resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 200m
-            memory: 512Mi
+          {{- toYaml .Values.dataPlane.components.kafka.ui.resources | nindent 10 }}
         ports:
         - containerPort: 8080
 ---
@@ -176,6 +166,8 @@ spec:
         volumeMounts:
         - name: connector-scripts
           mountPath: /scripts
+        resources:
+          {{- toYaml .Values.dataPlane.components.connectorsJob.resources | nindent 10 }}
       volumes:
       - name: connector-scripts
         configMap:

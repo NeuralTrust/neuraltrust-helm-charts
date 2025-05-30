@@ -5,7 +5,7 @@ metadata:
   labels:
     app: {{ .Release.Name }}-scheduler
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 3000
@@ -17,23 +17,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: "{{ .Release.Name }}-scheduler-route"
-  # annotations:
-  #   cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  #   nginx.ingress.kubernetes.io/ssl-redirect: "true"
-  #   nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-  #   nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-  #   nginx.ingress.kubernetes.io/x-frame-options: "DENY"
-  #   nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
-  #   nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
-  #   nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-  #   nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-  #   nginx.ingress.kubernetes.io/enable-cors: "true"
-  #   nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.neuraltrust.ai, https://dev.neuraltrust.ai, http://localhost:3000, https://dashboard.neuraltrust.ai, https://*"
-  #   nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
-  #   nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
-  #   nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
 spec:
   host: {{ .Values.controlPlane.components.scheduler.host | quote }}
   # ingressClassName: nginx # Not used in Route
