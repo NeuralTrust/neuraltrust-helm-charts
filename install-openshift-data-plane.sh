@@ -10,11 +10,11 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-openshift/values.yaml"
+VALUES_FILE="helm-charts/openshift/values.yaml"
 
 # Parse command line arguments
 RELEASE_NAME="data-plane"
-USE_OPENSHIFT_IMAGESTREAM=false # if false uses GCP image registry
+AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -29,8 +29,8 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
-    --use-openshift-imagestream)
-      USE_OPENSHIFT_IMAGESTREAM=true
+    --avoid-neuraltrust-private-registry)
+      AVOID_NEURALTRUST_PRIVATE_REGISTRY=true
       shift
       ;;
     *)
@@ -190,7 +190,7 @@ create_data_plane_secrets() {
     # Secrets are now created by Helm chart based on values passed.
     # Ensure OPENAI_API_KEY, GOOGLE_API_KEY, RESEND_API_KEY, and DATA_PLANE_JWT_SECRET are available as shell variables.
 
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         # Create registry credentials secret
         log_info "Please provide your GCR service account key (JSON format)"
         log_info "This key is required to pull images from Google Container Registry"
@@ -248,53 +248,32 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Determine ClickHouse image repository
-    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-oci://registry-1.docker.io/bitnamicharts/clickhouse}"
+    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./helm-charts/shared-charts/clickhouse}"
     log_info "Using ClickHouse image repository: $CLICKHOUSE_IMAGE_REPO_FINAL"
 
     # Determine ClickHouse chart version
     CLICKHOUSE_CHART_VERSION_FINAL="${CLICKHOUSE_VERSION:-8.0.10}"
     log_info "Using ClickHouse chart version: $CLICKHOUSE_CHART_VERSION_FINAL"
 
-    # Install ClickHouse with backup configuration
+    # Install ClickHouse with configuration from values file and only password via --set
     helm upgrade --install clickhouse "$CLICKHOUSE_IMAGE_REPO_FINAL" \
         --namespace "$NAMESPACE" \
         --version "$CLICKHOUSE_CHART_VERSION_FINAL" \
-        --set auth.username=neuraltrust \
+        -f helm-charts/openshift/values-clickhouse.yaml \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
-        --set shards=1 \
-        --set replicaCount=1 \
-        --set zookeeper.enabled=false \
-        --set persistence.size=100Gi \
-        --set resources.limits.memory=8Gi \
-        --set resources.requests.memory=4Gi \
-        --set resources.limits.cpu=4 \
-        --set resources.requests.cpu=2 \
-        --set logLevel=fatal \
         --wait
 
     log_info "ClickHouse password generated and stored in secret 'clickhouse-secrets'"
     log_info "Password: $CLICKHOUSE_PASSWORD"
     log_info "Please save this password in a secure location"
     
-    oc create secret generic clickhouse-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=CLICKHOUSE_USER="neuraltrust" \
-        --from-literal=CLICKHOUSE_DATABASE="neuraltrust" \
-        --from-literal=CLICKHOUSE_HOST="clickhouse.${NAMESPACE}.svc.cluster.local" \
-        --from-literal=CLICKHOUSE_PORT="8123" \
-        --dry-run=client -o yaml | oc apply -f -
-    
-    oc create configmap clickhouse-init-job \
-        --namespace "$NAMESPACE" \
-        --from-file=helm-openshift/data-plane/templates/clickhouse/sql-configmap.yaml \
-        --dry-run=client -o yaml | oc apply -f -
 }
 
 install_messaging() {
     log_info "Installing messaging system..."
 
     # Determine Kafka image repository
-    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-oci://registry-1.docker.io/bitnamicharts/kafka}"
+    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./helm-charts/shared-charts/kafka}"
     log_info "Using Kafka image repository: $KAFKA_IMAGE_REPO_FINAL"
 
     # Determine Kafka chart version
@@ -305,7 +284,7 @@ install_messaging() {
     helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
         --version "$KAFKA_CHART_VERSION_FINAL" \
         --namespace "$NAMESPACE" \
-        -f helm-openshift/values-kafka.yaml \
+        -f helm-charts/openshift/values-kafka.yaml \
         --wait
 }
 
@@ -327,18 +306,6 @@ install_data_plane() {
     validate_api_keys # Ensure at least one key is set
     prompt_for_huggingface_token
 
-    # Add required Helm repositories
-    log_info "Adding Helm repositories..."
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    # helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-    helm repo update
-
-    # Wait a moment for the ClusterIssuer to be ready
-    sleep 10
-
-    # Install ingress controller
-    # install_nginx_ingress
-
     # Create required secrets
     create_data_plane_secrets
 
@@ -357,36 +324,64 @@ install_data_plane() {
     fi
 
     PULL_SECRET=""
-    if [ "$USE_OPENSHIFT_IMAGESTREAM" = false ]; then
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         PULL_SECRET="gcr-secret"
     fi
 
-    helm upgrade --install data-plane ./helm-openshift/data-plane \
+    # Build optional configuration overrides for non-sensitive data
+    OPTIONAL_OVERRIDES=()
+    
+    # Add API host if specified
+    if [ -n "$DATA_PLANE_API_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.host=$DATA_PLANE_API_URL")
+    fi
+    
+    # Add backup configuration if specified
+    if [ -n "$CLICKHOUSE_BACKUP_TYPE" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
+    fi
+    if [ -n "$S3_BUCKET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.bucket=$S3_BUCKET")
+    fi
+    if [ -n "$S3_REGION" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.region=$S3_REGION")
+    fi
+    if [ -n "$S3_ENDPOINT" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
+    fi
+    if [ -n "$GCS_BUCKET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.gcs.bucket=$GCS_BUCKET")
+    fi
+    
+    # Add image overrides if specified (for development/testing)
+    if [ -n "$DATA_PLANE_API_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.image.repository=$DATA_PLANE_API_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$DATA_PLANE_API_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.image.tag=$DATA_PLANE_API_IMAGE_TAG")
+    fi
+    if [ -n "$WORKER_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.worker.image.repository=$WORKER_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$WORKER_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.worker.image.tag=$WORKER_IMAGE_TAG")
+    fi
+
+    helm upgrade --install data-plane ./helm-charts/openshift/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
-        --set dataPlane.components.api.host=$FINAL_DATA_PLANE_API_URL \
-        --set dataPlane.components.api.image.repository="$DATA_PLANE_API_IMAGE_REPOSITORY" \
-        --set dataPlane.components.api.image.tag="$DATA_PLANE_API_IMAGE_TAG" \
-        --set dataPlane.components.api.image.pullPolicy="$DATA_PLANE_API_IMAGE_PULL_POLICY" \
         --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
         --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
         --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-        --set dataPlane.components.worker.image.repository="$WORKER_IMAGE_REPOSITORY" \
-        --set dataPlane.components.worker.image.tag="$WORKER_IMAGE_TAG" \
-        --set dataPlane.components.worker.image.pullPolicy="$WORKER_IMAGE_PULL_POLICY" \
-        --set clickhouse.backup.type="${CLICKHOUSE_BACKUP_TYPE:-s3}" \
-        --set clickhouse.backup.s3.bucket="$S3_BUCKET" \
-        --set clickhouse.backup.s3.region="$S3_REGION" \
-        --set clickhouse.backup.s3.accessKey="$S3_ACCESS_KEY" \
-        --set clickhouse.backup.s3.secretKey="$S3_SECRET_KEY" \
-        --set clickhouse.backup.s3.endpoint="$S3_ENDPOINT" \
-        --set clickhouse.backup.gcs.bucket="$GCS_BUCKET" \
-        --set clickhouse.backup.gcs.accessKey="$GCS_ACCESS_KEY" \
-        --set clickhouse.backup.gcs.secretKey="$GCS_SECRET_KEY" \
+        --set clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
+        --set clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
+        --set clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
+        --set clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
+        "${OPTIONAL_OVERRIDES[@]}" \
         --wait
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"

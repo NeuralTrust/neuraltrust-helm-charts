@@ -1,0 +1,36 @@
+# ClickHouse configuration for OpenShift deployment
+# This file contains default configuration values that were previously passed via --set
+
+auth:
+  username: "neuraltrust"
+  # password should be set via --set (sensitive data)
+
+shards: 1
+replicaCount: 1
+
+zookeeper:
+  enabled: false
+
+persistence:
+  size: "100Gi"
+
+resources:
+  requests:
+    memory: "4Gi"
+    cpu: "2"
+  limits:
+    memory: "8Gi"
+    cpu: "4"
+
+logLevel: "fatal"
+
+# Security settings for OpenShift
+securityContext:
+  enabled: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+
+# OpenShift specific settings
+openshift:
+  enabled: true 
