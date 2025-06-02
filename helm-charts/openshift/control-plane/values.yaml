@@ -12,11 +12,13 @@ controlPlane:
   
   components:
     api:
-      replicas: 2
+      enabled: true
+      replicaCount: 2
       image:
-        repository: "your-registry/control-plane-api"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
         tag: "latest"
         pullPolicy: "IfNotPresent"
+      host: ""
       resources:
         requests:
           memory: "512Mi"
@@ -26,18 +28,20 @@ controlPlane:
           cpu: "500m"
     
     app:
+      enabled: true
       replicaCount: 2
       image:
-        repository: "your-registry/control-plane-app"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
         tag: "latest"
         pullPolicy: "IfNotPresent"
-      host: "app.example.com"
+      host: ""
+      secondaryHost: ""
       config:
         port: "3000"
         nodeEnv: "production"
-        apiUrl: "api.example.com"
-        controlPlaneApiUrl: "api.example.com"
-        dataPlaneApiUrl: "data-api.example.com"
+        apiUrl: ""
+        controlPlaneApiUrl: ""
+        dataPlaneApiUrl: ""
         openaiModel: "gpt-4"
       resources:
         requests:
@@ -56,15 +60,16 @@ controlPlane:
             cpu: "200m"
     
     scheduler:
-      replicas: 1
+      enabled: true
+      replicaCount: 1
       image:
-        repository: "your-registry/control-plane-scheduler"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler"
         tag: "latest"
         pullPolicy: "IfNotPresent"
-      host: "scheduler.example.com"
+      host: ""
       env:
-        dataPlaneApiUrl: "data-api.example.com"
-        controlPlaneApiUrl: "api.example.com"
+        dataPlaneApiUrl: ""
+        controlPlaneApiUrl: ""
       resources:
         requests:
           memory: "256Mi"
@@ -75,14 +80,16 @@ controlPlane:
 
 # PostgreSQL configuration
 postgresql:
+  enabled: true
   imagePullSecrets: []
   image:
     repository: "postgres"
-    tag: "14"
+    tag: "15-alpine"
     pullPolicy: "IfNotPresent"
   persistence:
     enabled: true
     size: "10Gi"
+    storageClass: ""
   resources:
     requests:
       memory: "512Mi"
@@ -90,6 +97,9 @@ postgresql:
     limits:
       memory: "1Gi"
       cpu: "500m"
+  service:
+    type: ClusterIP
+    port: 5432
   secrets:
     name: "postgresql-secrets"
     user: "postgres"

@@ -134,7 +134,7 @@ dataPlane:
     api:
       enabled: true
       image:
-        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/api
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
         tag: latest
         pullPolicy: Always
         imagePullSecrets:

@@ -25,12 +25,12 @@ clickhouse:
       repository: "curlimages/curl"
       tag: "latest"
     s3:
-      bucket: ""  # To be set via --set or environment
+      bucket: ""  # Define this value, or set it via --set or environment-specific values
       region: "us-west-2"
       endpoint: ""  # For custom S3 endpoints
       # accessKey and secretKey should be set via --set (sensitive)
     gcs:
-      bucket: ""  # To be set via --set or environment
+      bucket: ""  # Define this value, or set it via --set or environment-specific values
       # accessKey and secretKey should be set via --set (sensitive)
     resources:
       requests:
@@ -65,13 +65,16 @@ dataPlane:
   
   components:
     api:
-      replicas: 2
-      host: ""  # To be set via environment-specific values or --set
+      enabled: true
+      replicaCount: 2  # Standardized naming
+      host: ""  # Define this value, or set it via --set or environment-specific values
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/data-plane-api"
         tag: "latest"
         pullPolicy: "Always"
-      huggingfaceToken: ""  # To be set via --set (sensitive)
+      huggingfaceToken: ""  # Set via --set (sensitive)
+      accessMode: ReadWriteOnce
+      storage: 10Gi
       trustTestConfig:
         evaluator:
           provider: "google"
@@ -97,8 +100,10 @@ dataPlane:
           cpu: "1000m"
     
     worker:
+      enabled: true
+      replicaCount: 1  # Standardized naming
       image:
-        repository: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/data-plane-worker"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-ai/neuraltrust/workers"
         tag: "latest"
         pullPolicy: "Always"
       resources:
