@@ -1,0 +1,372 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3.2
+    container_name: neuraltrust-clickhouse
+    environment:
+      CLICKHOUSE_DB: neuraltrust
+      CLICKHOUSE_USER: neuraltrust
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-neuraltrust123}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgresql:
+    image: postgres:15-alpine
+    container_name: neuraltrust-postgresql
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:-neuraltrust}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: neuraltrust-kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.0
+    container_name: neuraltrust-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    restart: unless-stopped
+
+  kafka-connect:
+    image: confluentinc/cp-server-connect:7.7.0
+    container_name: neuraltrust-kafka-connect
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: compose-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+    ports:
+      - "8083:8083"
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: neuraltrust-kafka-ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+      - kafka-connect
+    restart: unless-stopped
+
+  control-plane-api:
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api:v1.2.6
+    container_name: neuraltrust-control-plane-api
+    environment:
+      # Database configuration - supports both internal and external PostgreSQL
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgresql}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-neuraltrust}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+      POSTGRES_PRISMA_URL: ${POSTGRES_PRISMA_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+      
+      # Data Plane URL configuration
+      DEFAULT_DATA_PLANE_URL: data-plane-api:8000
+      
+      # JWT Secret
+      CONTROL_PLANE_JWT_SECRET: ${CONTROL_PLANE_JWT_SECRET:-your-control-plane-secret}
+      
+      # API Keys (set these in .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      
+      # Clerk configuration
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_WEBHOOK_SECRET_SESSIONS: ${CLERK_WEBHOOK_SECRET_SESSIONS:-}
+      CLERK_WEBHOOK_SECRET_USERS: ${CLERK_WEBHOOK_SECRET_USERS:-}
+    ports:
+      - "3001:8000"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  scheduler:
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler:v1.2.6
+    container_name: neuraltrust-scheduler
+    environment:
+      # API URLs
+      DATA_PLANE_API_URL: http://data-plane-api:8000
+      CONTROL_PLANE_API_URL: http://control-plane-api:8000
+      
+      # Database configuration - supports both internal and external PostgreSQL
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgresql}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-neuraltrust}
+      
+      # API Keys
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    ports:
+      - "3002:3001"
+    depends_on:
+      - postgresql
+      - control-plane-api
+      - data-plane-api
+    restart: unless-stopped
+
+  # Database migration service (runs once)
+  db-migrations:
+    image: docker.io/library/app # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    container_name: neuraltrust-db-migrations
+    entrypoint: []  # Override the default entrypoint to prevent app from starting
+    environment:
+      # Database configuration
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgresql}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-neuraltrust}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+      POSTGRES_PRISMA_URL: ${POSTGRES_PRISMA_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        # Wait for PostgreSQL to be ready
+        echo "Waiting for PostgreSQL..."
+        echo "POSTGRES_HOST: $POSTGRES_HOST"
+        echo "POSTGRES_PORT: $POSTGRES_PORT"
+        echo "POSTGRES_DATABASE: $POSTGRES_DATABASE"
+        
+        # Check if PostgreSQL is ready
+        until nc -z -w 2 $POSTGRES_HOST $POSTGRES_PORT; do
+          echo "Waiting for PostgreSQL to be ready..."
+          sleep 2
+        done
+        
+        echo "PostgreSQL is ready, running database migrations..."
+        
+        # Set Prisma environment variables to avoid network access
+        export PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=true
+        export PRISMA_GENERATE_SKIP_AUTOINSTALL=true
+        export PRISMA_SKIP_POSTINSTALL_GENERATE=true
+        
+        # Change to app directory
+        cd /app
+        
+        # Try to find prisma in the image's node_modules
+        if [ -f /app/node_modules/.bin/prisma ]; then
+          echo "Using Prisma from /app/node_modules/.bin/prisma"
+          /app/node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
+        elif [ -f /node_modules/.bin/prisma ]; then
+          echo "Using Prisma from /node_modules/.bin/prisma"
+          /node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
+        else
+          echo "Prisma CLI not found in node_modules, using npx as fallback"
+          # Use npx with --prefer-offline to avoid network access if possible
+          npx --prefer-offline prisma migrate deploy --schema=/app/prisma/schema.prisma
+        fi
+        
+        echo "Database migrations completed successfully"
+        echo "Migration service exiting..."
+        exit 0
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: docker.io/library/app # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    container_name: neuraltrust-app
+    environment:
+      # Application configuration
+      NODE_ENV: production
+      PORT: 3000
+      
+      # API URLs
+      CONTROL_PLANE_API_URL: http://control-plane-api:8000
+      DATA_PLANE_API_URL: http://data-plane-api:8000
+      
+      # Database configuration (for Prisma migrations)
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgresql}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-neuraltrust}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+      POSTGRES_PRISMA_URL: ${POSTGRES_PRISMA_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@${POSTGRES_HOST:-postgresql}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-neuraltrust}?connection_limit=15}
+      
+      # Prisma configuration
+      PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: "true"
+      PRISMA_GENERATE_SKIP_AUTOINSTALL: "true"
+      PRISMA_SKIP_POSTINSTALL_GENERATE: "true"
+      
+      # JWT Secrets
+      CONTROL_PLANE_JWT_SECRET: ${CONTROL_PLANE_JWT_SECRET:-your-control-plane-secret}
+      DATA_PLANE_JWT_SECRET: ${DATA_PLANE_JWT_SECRET:-your-secret-key}
+      
+      # OpenAI configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4}
+      
+      # Resend configuration
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      
+      # Clerk configuration
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_WEBHOOK_SECRET_SESSIONS: ${CLERK_WEBHOOK_SECRET_SESSIONS:-}
+      CLERK_WEBHOOK_SECRET_USERS: ${CLERK_WEBHOOK_SECRET_USERS:-}
+      CLERK_AUTHORIZATION_CALLBACK_URL: ${CLERK_AUTHORIZATION_CALLBACK_URL:-http://localhost:3000/auth/callback}
+      CLERK_SIGN_IN_URL: ${CLERK_SIGN_IN_URL:-http://localhost:3000/sign-in}
+      CLERK_SIGN_UP_URL: ${CLERK_SIGN_UP_URL:-http://localhost:3000/sign-up}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      control-plane-api:
+        condition: service_healthy
+      data-plane-api:
+        condition: service_healthy
+      db-migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  data-plane-api:
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api:v1.2.6
+    container_name: neuraltrust-api
+    environment:
+      # Database configuration
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: neuraltrust
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-neuraltrust123}
+      CLICKHOUSE_DATABASE: neuraltrust
+      
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      
+      # API Keys (set these in .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
+      
+      # JWT Secret
+      DATA_PLANE_JWT_SECRET: ${DATA_PLANE_JWT_SECRET:-your-secret-key}
+    ports:
+      - "8000:8000"
+    volumes:
+      - huggingface_cache:/app/huggingface_cache
+      - ./.trusttest_config.json:/app/.trusttest_config.json:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  worker:
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers:v1.2.6
+    container_name: neuraltrust-worker
+    environment:
+      # Database configuration
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: neuraltrust
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-neuraltrust123}
+      CLICKHOUSE_DATABASE: neuraltrust
+      
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      
+      # API Keys (set these in .env file)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
+    depends_on:
+      - clickhouse
+      - kafka
+      - data-plane-api
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:
+  postgresql_data:
+  huggingface_cache: 
