@@ -96,4 +96,51 @@ In the base path define a `.trusttest_config.json` file with the following struc
     }
 } 
 ```
-This will be used to configure the LLMs for the red teaming process in the Data Plane.
+
+This will be used to configure the LLMs for the red teaming process in the Data Plane. For Azure OpenAI:
+
+```json
+{
+    "evaluator": {
+        "provider": "azure",
+        "model": "azure deployment name",
+        "temperature": 0.2,
+        "extra_args": { // optional add other azure args
+            "default_headers": {
+                "my-header": "my-value"
+            }
+        }
+    },
+    "question_generator": {
+        "provider": "azure",
+        "model": "azure deployment name",
+        "temperature": 0.2,
+        "extra_args": { // optional
+            "default_headers": {
+                "my-header": "my-value"
+            }
+        }
+    },
+    "embeddings": {
+        "provider": "openai", // or "google"
+        "model": "text-embedding-3-small"
+    },
+    "topic_summarizer": {
+        "provider": "azure",
+        "model": "azure deployment name",
+        "temperature": 0.2,
+        "extra_args": { // optional
+            "default_headers": {
+                "my-header": "my-value"
+            }
+        }
+    }
+}
+```
+And configure the following environment variables in the `.env` file:
+
+```bash
+AZURE_OPENAI_ENDPOINT=https://<your-resource-name>.openai.azure.com/
+AZURE_OPENAI_API_KEY=<your-api-key>
+OPENAI_API_VERSION=2024-02-15-preview
+```

@@ -201,7 +201,7 @@ services:
 
   # Database migration service (runs once)
   db-migrations:
-    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    image: docker.io/app:latest # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
     container_name: neuraltrust-db-migrations
     profiles:
       - control-plane
@@ -269,7 +269,7 @@ services:
     restart: "no"
 
   app:
-    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    image: docker.io/app:latest # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
     container_name: neuraltrust-app
     profiles:
       - control-plane
@@ -329,12 +329,18 @@ services:
     restart: unless-stopped
 
   data-plane-api:
-    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api:v1.2.6
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api:v1.2.8
     container_name: neuraltrust-data-plane-api
     profiles:
       - data-plane
       - control-plane
     environment:
+
+      # Nestle openai config
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-}
+
       # Database configuration
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
