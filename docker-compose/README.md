@@ -1,15 +1,21 @@
-# NeuralTrust Data Plane - Docker Compose
+# NeuralTrust Full Stack - Docker Compose
 
-Simple Docker Compose deployment of the NeuralTrust Data Plane components.
+Complete Docker Compose deployment of the NeuralTrust platform with both Control Plane and Data Plane components.
 
 ## Components
 
-- **ClickHouse**: Database for storing data
-- **Kafka**: Message broker with Zookeeper
-- **Kafka Connect**: Data integration platform
-- **Kafka UI**: Web interface for Kafka management
-- **Data Plane API**: Main API service
-- **Worker**: Background processing service
+### Data Plane
+- **ClickHouse**: Analytics database for traces and sensitive data
+- **Data Plane API**: Core API service for Clickhouse read and write operations
+- **Worker**: Kafka consumer for processing traces
+- **Kafka**: Message broker with Zookeeper for event streaming
+
+### Control Plane  
+- **PostgreSQL**: Primary database for application data
+- **Control Plane API**: Management API service for application data
+- **App**: Frontend web application
+- **Scheduler**: Background job scheduling service
+
 
 ## Quick Start
 
@@ -18,53 +24,69 @@ Simple Docker Compose deployment of the NeuralTrust Data Plane components.
    cp env.example .env
    ```
 
-2. **Edit `.env` file with your API keys:**
-   - OpenAI API key
-   - Google API key  
-   - Resend API key
-   - HuggingFace token
-   - JWT secret
+2. **Edit `.env` file with your configuration:**
+   - **Database passwords** (ClickHouse, PostgreSQL)
+   - **JWT secret** (Data Plane, Control Plane)
+   - **API keys** (OpenAI, Google, Resend, HuggingFace)
+   - **Clerk authentication** (for Control Plane UI) - optional
 
-3. **Create init scripts directory (optional):**
-   ```bash
-   mkdir -p init-scripts
-   ```
-
-4. **Start all services:**
+3. **Start all services:**
    ```bash
    docker-compose up -d
    ```
 
-5. **Check service status:**
+4. **Check service status:**
    ```bash
    docker-compose ps
    ```
 
+if everything is running, you should be able to access the following endpoints:
+- Web UI: http://localhost:3000
+
 ## Service Endpoints
 
+### Control Plane
+- **Web Application**: http://localhost:3000
+- **Control Plane API**: http://localhost:3001
+- **Scheduler**: http://localhost:3002
+
+### Data Plane
 - **Data Plane API**: http://localhost:8000
+
+### Infrastructure
 - **Kafka UI**: http://localhost:8080
 - **ClickHouse HTTP**: http://localhost:8123
+- **PostgreSQL**: localhost:5432 (configurable)
 - **Kafka Connect REST API**: http://localhost:8083
 
-## Useful Commands
 
-```bash
-# View logs
-docker-compose logs -f [service-name]
+## Configure Red Teaming LLMs
 
-# Stop all services
-docker-compose down
+For Red Teaming, you can configure which LLMs to use for different components. Currenlty we support OpenAI and Google.
 
-# Remove volumes (WARNING: deletes data)
-docker-compose down -v
+In the base path define a `.trusttest_config.json` file with the following structure:
 
-# Restart a specific service
-docker-compose restart [service-name]
+```json
+{
+    "evaluator": {
+        "provider": "openai", // or "google"
+        "model": "gpt-4o-mini",
+        "temperature": 0.2
+    },
+    "question_generator": {
+        "provider": "openai", // or "google"
+        "model": "gpt-4o-mini",
+        "temperature": 0.5
+    },
+    "embeddings": {
+        "provider": "openai", // or "google"
+        "model": "text-embedding-3-small"
+    },
+    "topic_summarizer": {
+        "provider": "openai", // or "google"
+        "model": "gpt-4o-mini",
+        "temperature": 0.2
+    }
+} 
 ```
-
-## Notes
-
-- All services use `restart: unless-stopped` for automatic recovery
-- Data persists in Docker volumes (`clickhouse_data`, `huggingface_cache`)
-- ClickHouse initialization scripts can be placed in `./init-scripts/` 
+This will be used to configure the LLMs for the red teaming process in the Data Plane.

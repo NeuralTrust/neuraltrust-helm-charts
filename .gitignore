@@ -3,7 +3,6 @@ clients/
 .env*
 !.env.control-plane.example
 !.env.data-plane.example
-!.trusttest_config.json
 gcr-keys.json
 
 # Credentials

@@ -127,7 +127,7 @@ services:
       DEFAULT_DATA_PLANE_URL: data-plane-api:8000
       
       # JWT Secret
-      CONTROL_PLANE_JWT_SECRET: ${CONTROL_PLANE_JWT_SECRET:-your-control-plane-secret}
+      CONTROL_PLANE_JWT_SECRET: ${JWT_SECRET:-your-control-plane-secret}
       
       # API Keys (set these in .env file)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -143,12 +143,14 @@ services:
     depends_on:
       postgresql:
         condition: service_healthy
+      data-plane-api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      interval: 60s
+      timeout: 20s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
 
   scheduler:
@@ -270,8 +272,8 @@ services:
       PRISMA_SKIP_POSTINSTALL_GENERATE: "true"
       
       # JWT Secrets
-      CONTROL_PLANE_JWT_SECRET: ${CONTROL_PLANE_JWT_SECRET:-your-control-plane-secret}
-      DATA_PLANE_JWT_SECRET: ${DATA_PLANE_JWT_SECRET:-your-secret-key}
+      CONTROL_PLANE_JWT_SECRET: ${JWT_SECRET:-your-control-plane-secret}
+      DATA_PLANE_JWT_SECRET: ${JWT_SECRET:-your-secret-key}
       
       # OpenAI configuration
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -303,7 +305,7 @@ services:
 
   data-plane-api:
     image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api:v1.2.6
-    container_name: neuraltrust-api
+    container_name: neuraltrust-data-plane-api
     environment:
       # Database configuration
       CLICKHOUSE_HOST: clickhouse
@@ -322,7 +324,7 @@ services:
       HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN:-}
       
       # JWT Secret
-      DATA_PLANE_JWT_SECRET: ${DATA_PLANE_JWT_SECRET:-your-secret-key}
+      DATA_PLANE_JWT_SECRET: ${JWT_SECRET:-your-secret-key}
     ports:
       - "8000:8000"
     volumes:
