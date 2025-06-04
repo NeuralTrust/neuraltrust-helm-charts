@@ -2,6 +2,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:25.3.2
     container_name: neuraltrust-clickhouse
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       CLICKHOUSE_DB: neuraltrust
       CLICKHOUSE_USER: neuraltrust
@@ -23,6 +26,8 @@ services:
   postgresql:
     image: postgres:15-alpine
     container_name: neuraltrust-postgresql
+    profiles:
+      - control-plane
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE:-neuraltrust}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -43,6 +48,9 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.7.0
     container_name: neuraltrust-kafka
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -64,6 +72,9 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.7.0
     container_name: neuraltrust-zookeeper
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -74,6 +85,9 @@ services:
   kafka-connect:
     image: confluentinc/cp-server-connect:7.7.0
     container_name: neuraltrust-kafka-connect
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka:9092
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
@@ -98,6 +112,9 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: neuraltrust-kafka-ui
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -113,6 +130,8 @@ services:
   control-plane-api:
     image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api:v1.2.6
     container_name: neuraltrust-control-plane-api
+    profiles:
+      - control-plane
     environment:
       # Database configuration - supports both internal and external PostgreSQL
       POSTGRES_HOST: ${POSTGRES_HOST:-postgresql}
@@ -156,6 +175,8 @@ services:
   scheduler:
     image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler:v1.2.6
     container_name: neuraltrust-scheduler
+    profiles:
+      - control-plane
     environment:
       # API URLs
       DATA_PLANE_API_URL: http://data-plane-api:8000
@@ -180,8 +201,10 @@ services:
 
   # Database migration service (runs once)
   db-migrations:
-    image: docker.io/library/app # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
     container_name: neuraltrust-db-migrations
+    profiles:
+      - control-plane
     entrypoint: []  # Override the default entrypoint to prevent app from starting
     environment:
       # Database configuration
@@ -246,8 +269,10 @@ services:
     restart: "no"
 
   app:
-    image: docker.io/library/app # europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app:v1.2.7
     container_name: neuraltrust-app
+    profiles:
+      - control-plane
     environment:
       # Application configuration
       NODE_ENV: production
@@ -306,6 +331,9 @@ services:
   data-plane-api:
     image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api:v1.2.6
     container_name: neuraltrust-data-plane-api
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       # Database configuration
       CLICKHOUSE_HOST: clickhouse
@@ -346,6 +374,9 @@ services:
   worker:
     image: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers:v1.2.6
     container_name: neuraltrust-worker
+    profiles:
+      - data-plane
+      - control-plane
     environment:
       # Database configuration
       CLICKHOUSE_HOST: clickhouse

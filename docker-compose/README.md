@@ -32,7 +32,14 @@ Complete Docker Compose deployment of the NeuralTrust platform with both Control
 
 3. **Start all services:**
    ```bash
+   # Start all services
    docker-compose up -d
+
+   # Start only the data plane
+   docker-compose --profile data-plane up -d
+
+   # Start only the control plane
+   docker-compose --profile control-plane up -d
    ```
 
 4. **Check service status:**
