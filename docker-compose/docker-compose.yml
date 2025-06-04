@@ -357,7 +357,7 @@ services:
       - "8000:8000"
     volumes:
       - huggingface_cache:/app/huggingface_cache
-      - ${PWD}/.trusttest_config.json:/app/.trusttest_config.json:ro
+      - ./.trusttest_config.json:/app/.trusttest_config.json:ro
     depends_on:
       clickhouse:
         condition: service_healthy

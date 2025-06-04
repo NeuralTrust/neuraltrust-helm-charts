@@ -4,9 +4,11 @@ clients/
 !.env.control-plane.example
 !.env.data-plane.example
 gcr-keys.json
+!*.trusttest_config.json
 
 # Credentials
 *.json
+!*.trusttest_config.json
 credentials/
 neuraltrust-*.json
 *.key
