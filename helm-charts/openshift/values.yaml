@@ -31,7 +31,7 @@ kafka:
   enabled: true
   connect:
     replicas: 1
-    image: confluentinc/cp-server-connect:7.7.0
+    image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
     imagePullSecrets:
       - name: ""
   broker:

@@ -44,7 +44,7 @@ clickhouse:
 global:
   kafka:
     connect:
-      image: "confluentinc/cp-kafka-connect:latest"
+      image: "europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest"
     ui:
       image: "provectuslabs/kafka-ui:latest"
 

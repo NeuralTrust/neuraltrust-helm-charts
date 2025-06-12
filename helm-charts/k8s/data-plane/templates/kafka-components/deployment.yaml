@@ -19,6 +19,24 @@ spec:
           image: {{ .Values.global.kafka.connect.image | quote }}
           ports:
             - containerPort: 8083
+          readinessProbe:
+            httpGet:
+              path: /connectors
+              port: 8083
+            # Give the pod up to 5 minutes to become ready
+            initialDelaySeconds: 180 # Increased from 30
+            periodSeconds: 15 # Increased from 10
+            timeoutSeconds: 10 # Increased from 5
+            failureThreshold: 10 # Increased from 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8083
+            # Start checking for liveness only after it should be ready
+            initialDelaySeconds: 300 # Increased from 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5 # Increased from 3
           env:
             - name: CONNECT_ERRORS_TOLERANCE
               value: "all"
@@ -47,7 +65,7 @@ spec:
             - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
               value: "false"
             - name: CONNECT_PLUGIN_PATH
-              value: "/usr/share/java,/usr/share/confluent-hub-components,/usr/share/filestream-connectors"
+              value: "/usr/share/java,/usr/share/confluent-hub-components"
             - name: CONNECT_REST_ADVERTISED_HOST_NAME
               valueFrom:
                 fieldRef:
@@ -68,20 +86,9 @@ spec:
               value: "3"
             - name: CONNECT_CONSUMER_DEFAULT_PARTITIONS
               value: "3"
+          imagePullPolicy: Always
           resources:
             {{- toYaml .Values.dataPlane.components.kafka.connect.resources | nindent 12 }}
-          lifecycle:
-            postStart:
-              exec:
-                command:
-                - /bin/sh
-                - -c
-                - |
-                  echo "Installing Kafka Connect plugins..."
-                  confluent-hub install --no-prompt clickhouse/clickhouse-kafka-connect:latest
-                  confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:latest
-                  confluent-hub install --no-prompt confluentinc/connect-transforms:latest
-                  ls -la /usr/share/confluent-hub-components
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -175,3 +182,5 @@ spec:
           defaultMode: 0755
       restartPolicy: OnFailure
 
+
+europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect:latest
