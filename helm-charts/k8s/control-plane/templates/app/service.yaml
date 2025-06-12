@@ -9,34 +9,33 @@ spec:
     - port: 80
       targetPort: {{ .Values.controlPlane.components.app.config.port }}
       name: http
-  type: LoadBalancer
+{{- if .Values.global.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Release.Name }}-app-ingress"
+  {{- if .Values.global.ingress.annotations }}
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    nginx.ingress.kubernetes.io/x-frame-options: "DENY"
-    nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
-    nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
-    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type"
+    {{- toYaml .Values.global.ingress.annotations | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: nginx
+  {{- if .Values.global.ingress.className }}
+  ingressClassName: {{ .Values.global.ingress.className }}
+  {{- end }}
+  {{- if .Values.global.ingress.tls.enabled }}
   tls:
     - hosts:
         - {{ .Values.controlPlane.components.app.host | quote }}
+        {{- if .Values.controlPlane.components.app.secondaryHost }}
         - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
+        {{- end }}
+      {{- if .Values.global.ingress.tls.secretName }}
+      secretName: {{ .Values.global.ingress.tls.secretName }}
+      {{- else }}
       secretName: "{{ .Release.Name }}-app-tls"
+      {{- end }}
+  {{- end }}
   rules:
     - host: {{ .Values.controlPlane.components.app.host | quote }}
       http:
@@ -45,25 +44,10 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-app-service
+                name: "{{ .Release.Name }}-app-service"
                 port:
-                  number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: "{{ .Release.Name }}-app-redirect"
-  annotations:
-    nginx.ingress.kubernetes.io/permanent-redirect: "https://{{ .Values.controlPlane.components.app.host }}"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
-      secretName: "{{ .Release.Name }}-app-tls"
-  rules:
+                  name: http
+    {{- if .Values.controlPlane.components.app.secondaryHost }}
     - host: {{ .Values.controlPlane.components.app.secondaryHost | quote }}
       http:
         paths:
@@ -71,6 +55,8 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-app-service
+                name: "{{ .Release.Name }}-app-service"
                 port:
-                  number: 80
+                  name: http
+    {{- end }}
+{{- end }}

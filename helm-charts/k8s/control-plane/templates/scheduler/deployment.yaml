@@ -16,8 +16,10 @@ spec:
         app: {{ .Release.Name }}-scheduler
         plane: control
     spec:
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.scheduler.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: {{ .Release.Name }}-scheduler
         image: "{{ .Values.controlPlane.components.scheduler.image.repository }}:{{ .Values.controlPlane.components.scheduler.image.tag }}"
@@ -55,18 +57,18 @@ spec:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
         - name: DATA_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          value: "https://{{ .Values.controlPlane.components.scheduler.env.dataPlaneApiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
         - name: CONTROL_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneApiUrl }}"
+          value: "https://{{ .Values.controlPlane.components.scheduler.env.controlPlaneApiUrl }}"
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: RESEND_API_KEY
           valueFrom:

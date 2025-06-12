@@ -43,7 +43,6 @@ controlPlane:
         controlPlaneApiUrl: ""
         dataPlaneApiUrl: ""
         openaiModel: "gpt-4"
-        insecureSkipTlsVerify: false
       resources:
         requests:
           memory: "512Mi"

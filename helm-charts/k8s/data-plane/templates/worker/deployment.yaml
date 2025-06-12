@@ -4,6 +4,7 @@ metadata:
   name: "{{ .Release.Name }}-worker"
   labels:
     app: worker
+    plane: data
 spec:
   replicas: 1
   selector:
@@ -13,9 +14,12 @@ spec:
     metadata:
       labels:
         app: worker
+        plane: data
     spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
         - name: gcr-secret
+      {{- end }}
       containers:
       - name: worker
         image: "{{ .Values.dataPlane.components.worker.image.repository }}:{{ .Values.dataPlane.components.worker.image.tag }}"
@@ -33,8 +37,13 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: "openai-secrets"
+              name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
               key: OPENAI_API_KEY
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+              key: GOOGLE_API_KEY
         - name: CLICKHOUSE_HOST
           valueFrom:
             secretKeyRef:

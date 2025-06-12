@@ -118,6 +118,10 @@ spec:
         env:
         - name: NODE_ENV
           value: "{{ .Values.controlPlane.components.app.config.nodeEnv }}"
+        {{- if .Values.controlPlane.components.app.config.insecureSkipTlsVerify }}
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: "0"
+        {{- end }}
         - name: PORT
           value: "{{ .Values.controlPlane.components.app.config.port }}"
         - name: NT_API_URL

@@ -13,22 +13,14 @@ DEFAULT_NAMESPACE="neuraltrust"
 VALUES_FILE="helm-charts/k8s/values.yaml"
 
 # Parse command line arguments
-SKIP_INGRESS=false
-SKIP_CERT_MANAGER=false
 INSTALL_POSTGRESQL=false
 RELEASE_NAME="control-plane"
+AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
+SKIP_INGRESS=false # if true, skips ingress-nginx installation
 
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
-    --skip-ingress)
-      SKIP_INGRESS=true
-      shift
-      ;;
-    --skip-cert-manager)
-      SKIP_CERT_MANAGER=true
-      shift
-      ;;
     --install-postgresql)
       INSTALL_POSTGRESQL=true
       shift
@@ -43,24 +35,29 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    --avoid-neuraltrust-private-registry)
+      AVOID_NEURALTRUST_PRIVATE_REGISTRY=true
+      shift
+      ;;
+    --skip-ingress)
+      SKIP_INGRESS=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
+      echo "Usage: $0 [options]"
+      echo "Options:"
+      echo "  --install-postgresql                         Install PostgreSQL in the cluster"
+      echo "  --namespace <namespace>                      Set the namespace (default: neuraltrust)"
+      echo "  --release-name <name>                        Set the release name (default: control-plane)"
+      echo "  --avoid-neuraltrust-private-registry         Use public images instead of NeuralTrust private registry"
+      echo "  --skip-ingress                               Skip ingress-nginx controller installation"
       exit 1
       ;;
   esac
 done
 
 # Set up additional Helm values based on parameters
-ADDITIONAL_VALUES=""
-if [ "$SKIP_INGRESS" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.ingress.enabled=false"
-fi
-if [ "$SKIP_CERT_MANAGER" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.certManager.enabled=false"
-fi
-if [ "$INSTALL_POSTGRESQL" = true ]; then
-  ADDITIONAL_VALUES="$ADDITIONAL_VALUES --set global.postgresql.enabled=true"
-fi
 
 verify_environment() {
     local env="${1:-$ENVIRONMENT}"
@@ -80,9 +77,6 @@ verify_environment() {
 
     # Ask for confirmation
     log_warn "You are about to install NeuralTrust Control Plane in ${env} environment"
-    log_warn "This will affect the following domains:"
-    log_warn "- Control Plane: $(grep CONTROL_PLANE_DOMAIN .env.$env | cut -d= -f2)"
-    log_warn "- WebApp: $(grep WEBAPP_DOMAIN .env.$env | cut -d= -f2)"
     
     read -p "Are you sure you want to continue? (yes/no) " -r
     echo
@@ -124,6 +118,38 @@ prompt_for_namespace() {
     log_info "Using namespace: $NAMESPACE"
 }
 
+# Function to prompt for mandatory DATA_PLANE_API_URL
+prompt_for_data_plane_api_url() {
+    if [ -z "$DATA_PLANE_API_URL" ]; then
+        log_info "DATA_PLANE_API_URL is required for the control plane to communicate with the data plane."
+        while [ -z "$DATA_PLANE_API_URL" ]; do
+            read -p "Enter the Data Plane API URL (e.g., data-api.example.com): " DATA_PLANE_API_URL
+            if [ -z "$DATA_PLANE_API_URL" ]; then
+                log_error "DATA_PLANE_API_URL cannot be empty. Please provide a valid URL."
+            fi
+        done
+    fi
+    log_info "Using Data Plane API URL: $DATA_PLANE_API_URL"
+}
+
+# Function to prompt for mandatory CONTROL_PLANE_JWT_SECRET
+prompt_for_control_plane_jwt_secret() {
+    if [ -z "$CONTROL_PLANE_JWT_SECRET" ]; then
+        log_info "CONTROL_PLANE_JWT_SECRET is required for secure communication between control plane and data plane."
+        log_info "This MUST be the same JWT secret used by your data plane installation."
+        
+        while [ -z "$CONTROL_PLANE_JWT_SECRET" ]; do
+            read -p "Enter the Control Plane JWT Secret (same as data plane): " CONTROL_PLANE_JWT_SECRET
+            if [ -z "$CONTROL_PLANE_JWT_SECRET" ]; then
+                log_error "JWT Secret cannot be empty. Please provide the same JWT secret used by your data plane."
+            fi
+        done
+        log_info "Using provided JWT secret for control plane authentication."
+    else
+        log_info "Using Control Plane JWT Secret from environment variables."
+    fi
+}
+
 # Function to create namespace if it doesn't exist
 create_namespace_if_not_exists() {
     if ! kubectl get namespace "$NAMESPACE" &> /dev/null; then
@@ -135,220 +161,93 @@ create_namespace_if_not_exists() {
     fi
 }
 
-create_control_plane_secrets() {
-    log_info "Creating control plane secrets..."
+create_gcr_secret() {
     
-    kubectl create secret generic control-plane-jwt-secret \
-        --namespace "$NAMESPACE" \
-        --from-literal=CONTROL_PLANE_JWT_SECRET="$CONTROL_PLANE_JWT_SECRET" \
-        --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Create PostgreSQL secrets if needed
-    if [ "$INSTALL_POSTGRESQL" = true ]; then
-        # Generate a random password if not provided
-        if [ -z "$POSTGRES_PASSWORD" ]; then
-            POSTGRES_PASSWORD=$(openssl rand -base64 12)
-            log_info "Generated random PostgreSQL password"
-        fi
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
+        # Create registry credentials secret
+        log_info "Please provide your GCR service account key (JSON format)"
+        log_info "This key is required to pull images from Google Container Registry"
+        log_info "You should have received this key from NeuralTrust"
         
-        kubectl create secret generic postgresql-secrets \
-            --namespace "$NAMESPACE" \
-            --from-literal=POSTGRES_USER="${POSTGRES_USER:-postgres}" \
-            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
-            --from-literal=POSTGRES_HOST="${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}" \
-            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-            
-        log_info "PostgreSQL credentials:"
-        log_info "  Host: ${POSTGRES_HOST:-$RELEASE_NAME-postgresql.$NAMESPACE.svc.cluster.local}"
-        log_info "  Port: ${POSTGRES_PORT:-5432}"
-        log_info "  Database: ${POSTGRES_DB:-neuraltrust}"
-        log_info "  User: ${POSTGRES_USER:-postgres}"
-        log_info "  Password: $POSTGRES_PASSWORD"
-    else
-        # Create the PostgreSQL secrets from provided environment variables
-        kubectl create secret generic postgresql-secrets \
-            --namespace "$NAMESPACE" \
-            --from-literal=POSTGRES_HOST="$POSTGRES_HOST" \
-            --from-literal=POSTGRES_PORT="${POSTGRES_PORT:-5432}" \
-            --from-literal=POSTGRES_DB="${POSTGRES_DB:-neuraltrust}" \
-            --from-literal=POSTGRES_USER="$POSTGRES_USER" \
-            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            --dry-run=client -o yaml | kubectl apply -f -
-    fi
-    
-    # Create OpenAI API key secret
-    kubectl create secret generic openai-secrets \
-        --namespace "$NAMESPACE" \
-        --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-        --dry-run=client -o yaml | kubectl apply -f -
-
-    # Create registry credentials secret
-    log_info "Please provide your GCR service account key (JSON format)"
-    log_info "This key is required to pull images from Google Container Registry"
-    log_info "You should have received this key from NeuralTrust"
-    
-    # Check if GCR_KEY_FILE environment variable is set
-    if [ -n "$GCR_KEY_FILE" ] && [ -f "$GCR_KEY_FILE" ]; then
-        log_info "Using GCR key file from environment variable: $GCR_KEY_FILE"
-        GCR_KEY=$(cat "$GCR_KEY_FILE")
-    else
-        # If running in interactive mode, prompt for the key
-        if [ -t 0 ]; then
-            log_info "Enter the path to your GCR key file:"
-            read -p "> " GCR_KEY_FILE
-            
-            if [ ! -f "$GCR_KEY_FILE" ]; then
-                log_error "File not found: $GCR_KEY_FILE"
-                exit 1
-            fi
-            
+        # Check if GCR_KEY_FILE environment variable is set
+        if [ -n "$GCR_KEY_FILE" ] && [ -f "$GCR_KEY_FILE" ]; then
+            log_info "Using GCR key file from environment variable: $GCR_KEY_FILE"
             GCR_KEY=$(cat "$GCR_KEY_FILE")
         else
-            # If not interactive, check if the key is provided via stdin
-            if [ -p /dev/stdin ]; then
-                GCR_KEY=$(cat)
+            # If running in interactive mode, prompt for the key
+            if [ -t 0 ]; then
+                log_info "Enter the path to your GCR key file:"
+                read -p "> " GCR_KEY_FILE
+                
+                if [ ! -f "$GCR_KEY_FILE" ]; then
+                    log_error "File not found: $GCR_KEY_FILE"
+                    exit 1
+                fi
+                
+                GCR_KEY=$(cat "$GCR_KEY_FILE")
             else
-                log_error "GCR key not provided. Please set GCR_KEY_FILE environment variable or provide the key via stdin."
-                exit 1
+                # If not interactive, check if the key is provided via stdin
+                if [ -p /dev/stdin ]; then
+                    GCR_KEY=$(cat)
+                else
+                    log_error "GCR key not provided. Please set GCR_KEY_FILE environment variable or provide the key via stdin."
+                    exit 1
+                fi
             fi
         fi
-    fi
-    
-    # Validate JSON format
-    if ! echo "$GCR_KEY" | jq . > /dev/null 2>&1; then
-        log_error "Invalid JSON format for GCR key"
-        exit 1
-    fi
-    
-    # Create the secret
-    kubectl create -n "$NAMESPACE" secret docker-registry gcr-secret \
-        --docker-server=europe-west1-docker.pkg.dev \
-        --docker-username=_json_key \
-        --docker-password="$GCR_KEY" \
-        --docker-email=admin@neuraltrust.ai \
-        --dry-run=client -o yaml | kubectl apply -f -
-    
-    log_info "GCR secret created successfully"
-}
-
-# Function to check if cert-manager is installed in any namespace
-check_cert_manager_installed() {
-    # Check in common namespaces where cert-manager might be installed
-    if kubectl get deployment -n cert-manager cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in cert-manager namespace"
-        return 0
-    elif kubectl get deployment -n kube-system cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in kube-system namespace"
-        return 0
-    elif kubectl get deployment -n "$NAMESPACE" cert-manager-webhook &> /dev/null; then
-        log_info "cert-manager found in $NAMESPACE namespace"
-        return 0
-    else
-        # Check across all namespaces as a last resort
-        if kubectl get deployment --all-namespaces | grep cert-manager-webhook &> /dev/null; then
-            log_info "cert-manager found in another namespace"
-            return 0
+        
+        # Validate JSON format
+        if ! echo "$GCR_KEY" | jq . > /dev/null 2>&1; then
+            log_error "Invalid JSON format for GCR key"
+            exit 1
         fi
-    fi
-    return 1
-}
-
-# Function to check if NGINX Ingress Controller is installed in any namespace
-check_nginx_ingress_installed() {
-    # Check in common namespaces where NGINX Ingress might be installed
-    if kubectl get deployment -n ingress-nginx ingress-nginx-controller &> /dev/null; then
-        log_info "NGINX Ingress Controller found in ingress-nginx namespace"
-        return 0
-    elif kubectl get deployment -n kube-system ingress-nginx-controller &> /dev/null; then
-        log_info "NGINX Ingress Controller found in kube-system namespace"
-        return 0
-    elif kubectl get deployment -n "$NAMESPACE" ingress-nginx-controller &> /dev/null; then
-        log_info "NGINX Ingress Controller found in $NAMESPACE namespace"
-        return 0
+        
+        # Create the secret
+        kubectl create -n "$NAMESPACE" secret docker-registry gcr-secret \
+            --docker-server=europe-west1-docker.pkg.dev \
+            --docker-username=_json_key \
+            --docker-password="$GCR_KEY" \
+            --docker-email=admin@neuraltrust.ai \
+            --dry-run=client -o yaml | kubectl apply -f -
+        
+        log_info "GCR secret created successfully"
     else
-        # Check across all namespaces as a last resort
-        if kubectl get deployment --all-namespaces | grep ingress-nginx-controller &> /dev/null; then
-            log_info "NGINX Ingress Controller found in another namespace"
-            return 0
-        fi
+        log_info "Skipping GCR secret creation as requested."
     fi
-    return 1
 }
 
-# Function to install cert-manager if needed
-install_cert_manager() {
-    if [ "$SKIP_CERT_MANAGER" = true ]; then
-        log_info "Skipping cert-manager installation as requested"
+# Function to install ingress-nginx
+install_ingress_nginx() {
+    log_info "Installing ingress-nginx controller..."
+    
+    # Check if ingress-nginx is already installed
+    if helm list -n ingress-nginx | grep -q ingress-nginx; then
+        log_info "ingress-nginx is already installed, skipping..."
         return 0
     fi
     
-    if ! check_cert_manager_installed; then
-        log_info "Installing cert-manager..."
-        helm upgrade --install cert-manager "${CERT_MANAGER_CHART:-./helm-charts/shared-charts/cert-manager}" \
-            --namespace "$NAMESPACE" \
-            --set installCRDs=true \
-            --wait
-
-        # Wait for cert-manager webhook to be ready
-        log_info "Waiting for cert-manager webhook..."
-        kubectl wait --for=condition=Available deployment/cert-manager-webhook \
-            --namespace "$NAMESPACE" \
-            --timeout=120s
-
-        # Create ClusterIssuer
-        log_info "Creating ClusterIssuer..."
-        kubectl apply -f - <<EOF
-        apiVersion: cert-manager.io/v1
-        kind: ClusterIssuer
-        metadata:
-          name: letsencrypt-prod
-        spec:
-          acme:
-            server: https://acme-v02.api.letsencrypt.org/directory
-            email: ${EMAIL}
-            privateKeySecretRef:
-              name: letsencrypt-prod
-            solvers:
-            - http01:
-                ingress:
-                  class: nginx
-EOF
-    else
-        log_info "cert-manager already installed, skipping..."
-    fi
-}
-
-# Function to install NGINX Ingress Controller if needed
-install_nginx_ingress() {
-    if [ "$SKIP_INGRESS" = true ]; then
-        log_info "Skipping NGINX Ingress Controller installation as requested"
-        return 0
+    # Create ingress-nginx namespace if it doesn't exist
+    if ! kubectl get namespace ingress-nginx &> /dev/null; then
+        log_info "Creating ingress-nginx namespace..."
+        kubectl create namespace ingress-nginx
     fi
     
-    if ! check_nginx_ingress_installed; then
-        log_info "Installing NGINX Ingress Controller..."
-        helm upgrade --install ingress-nginx "${NGINX_INGRESS_CHART:-./helm-charts/shared-charts/ingress-nginx}" \
-            --namespace "$NAMESPACE" \
-            --set controller.replicaCount=2 \
-            --set controller.service.type=LoadBalancer \
-            --set controller.config.proxy-body-size="50m" \
-            --set controller.config.proxy-connect-timeout="600" \
-            --set controller.config.proxy-read-timeout="600" \
-            --set controller.config.proxy-send-timeout="600" \
-            --set controller.config.ssl-protocols="TLSv1.2 TLSv1.3" \
-            --set controller.metrics.enabled=true \
-            --wait
-
-        # Wait for ingress controller to be ready
-        log_info "Waiting for ingress controller to be ready..."
-        kubectl wait --for=condition=Available deployment/ingress-nginx-controller \
-            --namespace "$NAMESPACE" \
-            --timeout=120s
-    else
-        log_info "NGINX Ingress Controller already installed, skipping..."
-    fi
+    # Install ingress-nginx using the local chart
+    helm upgrade --install ingress-nginx ./helm-charts/shared-charts/ingress-nginx \
+        --namespace ingress-nginx \
+        --set controller.service.type=LoadBalancer \
+        --wait --timeout=10m
+    
+    log_info "ingress-nginx controller installed successfully!"
+    
+    # Wait for the ingress controller to be ready
+    log_info "Waiting for ingress controller to be ready..."
+    kubectl wait --namespace ingress-nginx \
+        --for=condition=ready pod \
+        --selector=app.kubernetes.io/component=controller \
+        --timeout=300s
+    
+    log_info "ingress-nginx controller is ready!"
 }
 
 install_control_plane() {
@@ -358,50 +257,244 @@ install_control_plane() {
     prompt_for_namespace
     create_namespace_if_not_exists
 
-    # Install cert-manager if needed
-    install_cert_manager
-
-    # Install NGINX Ingress Controller if needed
-    install_nginx_ingress
+    # Install ingress-nginx controller first
+    if [ "$SKIP_INGRESS" = false ]; then
+        install_ingress_nginx
+    else
+        log_info "Skipping ingress-nginx installation as requested"
+        log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
+        log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
+        log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-api-service 8080:80"
+        log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-app-service 3000:80"
+        log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-scheduler-service 8081:80"
+    fi
 
     # Create required secrets
-    create_control_plane_secrets
+    create_gcr_secret
+
+    PULL_SECRET=""
+    if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
+        PULL_SECRET="gcr-secret"
+    fi
 
     # Install control plane components
     log_info "Installing control plane..."
+    
+    # Set PostgreSQL configuration based on installation type
+    if [ "$INSTALL_POSTGRESQL" = true ]; then
+        echo "Installing PostgreSQL in $NAMESPACE namespace..."
+        if [ -z "$POSTGRES_PASSWORD" ]; then
+            POSTGRES_PASSWORD=$(openssl rand -base64 12)
+            log_info "Generated random PostgreSQL password: $POSTGRES_PASSWORD"
+        fi
+        POSTGRES_HOST_FINAL="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
+        POSTGRES_USER_FINAL="${POSTGRES_USER:-postgres}"
+        POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
+        POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
+    else
+        echo "Using external PostgreSQL database"
+        POSTGRES_HOST_FINAL="$POSTGRES_HOST"
+        POSTGRES_USER_FINAL="$POSTGRES_USER"
+        POSTGRES_DB_FINAL="${POSTGRES_DB:-neuraltrust}"
+        POSTGRES_PORT_FINAL="${POSTGRES_PORT:-5432}"
+    fi
+    
+    # Build optional configuration overrides for non-sensitive data
+    OPTIONAL_OVERRIDES=()
+    
+    # Add image pull secrets if specified
+    if [ -n "$PULL_SECRET" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.imagePullSecrets=$PULL_SECRET")
+    fi
+    
+    # Add API host if specified
+    if [ -n "$CONTROL_PLANE_API_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.host=$CONTROL_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.config.controlPlaneApiUrl=$CONTROL_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.env.controlPlaneApiUrl=$CONTROL_PLANE_API_URL")
+    fi
+    
+    # Add app configuration if specified
+    if [ -n "$CONTROL_PLANE_APP_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.host=$CONTROL_PLANE_APP_URL")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_SECONDARY_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.secondaryHost=$CONTROL_PLANE_APP_SECONDARY_URL")
+    fi
+    if [ -n "$OPENAI_MODEL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.config.openaiModel=$OPENAI_MODEL")
+    fi
+    
+    # Add scheduler configuration if specified
+    if [ -n "$CONTROL_PLANE_SCHEDULER_URL" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.host=$CONTROL_PLANE_SCHEDULER_URL")
+    fi
+    
+    # Add image overrides if specified (for development/testing)
+    if [ -n "$CONTROL_PLANE_API_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.image.repository=$CONTROL_PLANE_API_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_API_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.api.image.tag=$CONTROL_PLANE_API_IMAGE_TAG")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.image.repository=$CONTROL_PLANE_APP_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_APP_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.app.image.tag=$CONTROL_PLANE_APP_IMAGE_TAG")
+    fi
+    if [ -n "$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.image.repository=$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY")
+    fi
+    if [ -n "$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" ]; then
+        OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.image.tag=$CONTROL_PLANE_SCHEDULER_IMAGE_TAG")
+    fi
+    
     helm upgrade --install $RELEASE_NAME ./helm-charts/k8s/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
-        --set controlPlane.components.api.host="$CONTROL_PLANE_API_URL" \
-        --set controlPlane.components.api.image.repository="$CONTROL_PLANE_API_IMAGE_REPOSITORY" \
-        --set controlPlane.components.api.image.tag="$CONTROL_PLANE_API_IMAGE_TAG" \
-        --set controlPlane.components.api.image.pullPolicy="$CONTROL_PLANE_API_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.app.host="$CONTROL_PLANE_APP_URL" \
-        --set controlPlane.components.app.secondaryHost="$CONTROL_PLANE_APP_SECONDARY_URL" \
-        --set controlPlane.components.app.image.repository="$CONTROL_PLANE_APP_IMAGE_REPOSITORY" \
-        --set controlPlane.components.app.image.tag="$CONTROL_PLANE_APP_IMAGE_TAG" \
-        --set controlPlane.components.app.image.pullPolicy="$CONTROL_PLANE_APP_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.app.config.controlPlaneApiUrl="$CONTROL_PLANE_API_URL" \
+        --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
+        --set openai.secrets.apiKey="$OPENAI_API_KEY" \
+        --set postgresql.secrets.user="$POSTGRES_USER_FINAL" \
+        --set postgresql.secrets.password="$POSTGRES_PASSWORD" \
+        --set postgresql.secrets.database="$POSTGRES_DB_FINAL" \
+        --set postgresql.secrets.host="$POSTGRES_HOST_FINAL" \
+        --set postgresql.secrets.port="$POSTGRES_PORT_FINAL" \
+        --set global.postgresql.enabled="$INSTALL_POSTGRESQL" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.components.app.config.openaiModel="$OPENAI_MODEL" \
         --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.components.scheduler.image.repository="$CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY" \
-        --set controlPlane.components.scheduler.image.tag="$CONTROL_PLANE_SCHEDULER_IMAGE_TAG" \
-        --set controlPlane.components.scheduler.image.pullPolicy="$CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY" \
-        --set controlPlane.components.scheduler.host="$CONTROL_PLANE_SCHEDULER_URL" \
-        --set controlPlane.components.global.resend.apiKey="$RESEND_API_KEY" \
-        --set controlPlane.components.global.resend.alertSender="$RESEND_ALERT_SENDER" \
-        --set controlPlane.components.global.resend.inviteSender="$RESEND_INVITE_SENDER" \
-        --set controlPlane.components.global.clerk.publishableKey="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" \
-        --set controlPlane.components.global.clerk.secretKey="$CLERK_SECRET_KEY" \
-        --set controlPlane.components.global.clerk.webhookSecretSessions="$CLERK_WEBHOOK_SECRET_SESSIONS" \
-        --set controlPlane.components.global.clerk.webhookSecretUsers="$CLERK_WEBHOOK_SECRET_USERS" \
-        --set controlPlane.components.global.clerk.authorizationCallbackUrl="$GITHUB_AUTHORIZATION_CALLBACK_URL" \
-        --set controlPlane.components.global.clerk.signInUrl="$NEXT_PUBLIC_CLERK_SIGN_IN_URL" \
-        --set controlPlane.components.global.clerk.signUpUrl="$NEXT_PUBLIC_CLERK_SIGN_UP_URL" \
+        --set resend.apiKey="${RESEND_API_KEY:-}" \
+        --set resend.alertSender="${RESEND_ALERT_SENDER:-alerts@example.com}" \
+        --set resend.inviteSender="${RESEND_INVITE_SENDER:-invites@example.com}" \
+        --set clerk.publishableKey="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" \
+        --set clerk.secretKey="${CLERK_SECRET_KEY:-}" \
+        --set clerk.webhookSecretSessions="${CLERK_WEBHOOK_SECRET_SESSIONS:-}" \
+        --set clerk.webhookSecretUsers="${CLERK_WEBHOOK_SECRET_USERS:-}" \
+        --set clerk.authorizationCallbackUrl="${GITHUB_AUTHORIZATION_CALLBACK_URL:-https://app.example.com/auth/callback}" \
+        --set clerk.signInUrl="${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-https://app.example.com/sign-in}" \
+        --set clerk.signUpUrl="${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-https://app.example.com/sign-up}" \
+        --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+        "${OPTIONAL_OVERRIDES[@]}" \
         $ADDITIONAL_VALUES \
         --wait
+
+    # If CONTROL_PLANE_API_URL was initially empty (meaning Kubernetes generates the API host via ingress),
+    # we need to fetch this generated host and update the app's configuration.
+    # The $CONTROL_PLANE_API_URL variable holds its value from the sourced .env file.
+    if [ -z "$CONTROL_PLANE_API_URL" ]; then
+        log_info "CONTROL_PLANE_API_URL was empty. Attempting to fetch the generated API ingress host..."
+        # Assuming the API ingress is named based on the release name and a suffix '-api'
+        API_INGRESS_NAME="$RELEASE_NAME-api-ingress"
+        
+        ACTUAL_API_HOST=""
+        RETRY_COUNT=0
+        MAX_RETRIES=12  # Total wait time: MAX_RETRIES * RETRY_DELAY (e.g., 12 * 10s = 120s)
+        RETRY_DELAY=10 # Seconds
+
+        log_info "Waiting for API ingress '$API_INGRESS_NAME' in namespace '$NAMESPACE' to be assigned a host..."
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            # Fetch the host. Use 2>/dev/null to suppress errors if ingress not found yet.
+            RAW_KUBECTL_GET_INGRESS=$(kubectl get ingress "$API_INGRESS_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
+            
+            # Check if kubectl command was successful and output is not empty
+            if [ $? -eq 0 ] && [ -n "$RAW_KUBECTL_GET_INGRESS" ]; then
+                ACTUAL_API_HOST=$RAW_KUBECTL_GET_INGRESS
+                log_info "Fetched API host: $ACTUAL_API_HOST"
+                break
+            else
+                log_info "API ingress host not yet available or ingress not found. Retrying in $RETRY_DELAY seconds... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
+                sleep $RETRY_DELAY
+                RETRY_COUNT=$((RETRY_COUNT+1))
+            fi
+        done
+
+        if [ -n "$ACTUAL_API_HOST" ]; then
+            log_info "Updating app deployment with the fetched API host: $ACTUAL_API_HOST"
+            # --reuse-values ensures all other configurations from the initial install are preserved.
+            # We only override the specific value for the app's API URL.
+            helm upgrade $RELEASE_NAME ./helm-charts/k8s/control-plane \
+                --namespace "$NAMESPACE" \
+                --reuse-values \
+                --set controlPlane.components.app.config.controlPlaneApiUrl="$ACTUAL_API_HOST" \
+                --set controlPlane.components.scheduler.env.controlPlaneApiUrl="$ACTUAL_API_HOST" \
+                --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+                --timeout 5m \
+                --wait
+            
+            if [ $? -eq 0 ]; then
+                log_info "App deployment successfully updated to use API host: $ACTUAL_API_HOST"
+            else
+                log_error "Failed to update app deployment with the new API host '$ACTUAL_API_HOST'. Check Helm status for release '$RELEASE_NAME'."
+            fi
+        else
+            log_error "Failed to fetch API ingress host after $MAX_RETRIES attempts for ingress '$API_INGRESS_NAME'."
+            log_warn "The app's CONTROL_PLANE_API_URL (controlPlane.components.app.config.controlPlaneApiUrl) might be incorrect."
+            log_warn "It was initially configured with an empty value, resulting in 'https://' and was not updated."
+            log_warn "Manual intervention might be required to set it to the correct API host."
+        fi
+    else
+        log_info "CONTROL_PLANE_API_URL was set to '$CONTROL_PLANE_API_URL'. The app deployment will use this value directly."
+        log_info "No dynamic update needed for controlPlane.components.app.config.controlPlaneApiUrl based on a generated ingress host."
+    fi
+
+    # If CONTROL_PLANE_SCHEDULER_URL was initially empty (meaning Kubernetes generates the scheduler host via ingress),
+    # we need to fetch this generated host and update the app's configuration.
+    # The $CONTROL_PLANE_SCHEDULER_URL variable holds its value from the sourced .env file.
+    if [ -z "$CONTROL_PLANE_SCHEDULER_URL" ]; then
+        log_info "CONTROL_PLANE_SCHEDULER_URL was empty. Attempting to fetch the generated scheduler ingress host..."
+        # Assuming the scheduler ingress is named based on the release name and a suffix '-scheduler-ingress'
+        SCHEDULER_INGRESS_NAME="$RELEASE_NAME-scheduler-ingress"
+        
+        ACTUAL_SCHEDULER_HOST=""
+        RETRY_COUNT=0
+        MAX_RETRIES=12  # Total wait time: MAX_RETRIES * RETRY_DELAY (e.g., 12 * 10s = 120s)
+        RETRY_DELAY=10 # Seconds
+
+        log_info "Waiting for scheduler ingress '$SCHEDULER_INGRESS_NAME' in namespace '$NAMESPACE' to be assigned a host..."
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            # Fetch the host. Use 2>/dev/null to suppress errors if ingress not found yet.
+            RAW_KUBECTL_GET_INGRESS=$(kubectl get ingress "$SCHEDULER_INGRESS_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
+            
+            # Check if kubectl command was successful and output is not empty
+            if [ $? -eq 0 ] && [ -n "$RAW_KUBECTL_GET_INGRESS" ]; then
+                ACTUAL_SCHEDULER_HOST=$RAW_KUBECTL_GET_INGRESS
+                log_info "Fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
+                break
+            else
+                log_info "Scheduler ingress host not yet available or ingress not found. Retrying in $RETRY_DELAY seconds... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
+                sleep $RETRY_DELAY
+                RETRY_COUNT=$((RETRY_COUNT+1))
+            fi
+        done
+
+        if [ -n "$ACTUAL_SCHEDULER_HOST" ]; then
+            log_info "Updating app deployment with the fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
+            # --reuse-values ensures all other configurations from the initial install are preserved.
+            # We only override the specific value for the app's scheduler URL.
+            helm upgrade $RELEASE_NAME ./helm-charts/k8s/control-plane \
+                --namespace "$NAMESPACE" \
+                --reuse-values \
+                --set controlPlane.components.scheduler.host="$ACTUAL_SCHEDULER_HOST" \
+                --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+                --timeout 5m \
+                --wait
+            
+            if [ $? -eq 0 ]; then
+                log_info "App deployment successfully updated to use scheduler host: $ACTUAL_SCHEDULER_HOST"
+            else
+                log_error "Failed to update app deployment with the new scheduler host '$ACTUAL_SCHEDULER_HOST'. Check Helm status for release '$RELEASE_NAME'."
+            fi
+        else
+            log_error "Failed to fetch scheduler ingress host after $MAX_RETRIES attempts for ingress '$SCHEDULER_INGRESS_NAME'."
+            log_warn "The app's CONTROL_PLANE_SCHEDULER_URL (controlPlane.components.scheduler.host) might be incorrect."
+            log_warn "It was initially configured with an empty value, resulting in 'https://' and was not updated."
+            log_warn "Manual intervention might be required to set it to the correct scheduler host."
+        fi
+    else
+        log_info "CONTROL_PLANE_SCHEDULER_URL was set to '$CONTROL_PLANE_SCHEDULER_URL'. The app deployment will use this value directly."
+        log_info "No dynamic update needed for controlPlane.components.scheduler.host based on a generated ingress host."
+    fi
 
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"
 }
@@ -409,31 +502,22 @@ install_control_plane() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    validate_command "kubectl"
+    validate_command "oc"
     validate_command "helm"
     validate_command "openssl"
 
     # Check if cluster is accessible
-    if ! kubectl get nodes &> /dev/null; then
+    if ! kubectl get pods &> /dev/null; then
         log_error "Cannot access Kubernetes cluster"
         exit 1
-    fi
-
-    # Check if data plane is installed
-    if ! kubectl get deployment -n "$NAMESPACE" data-plane-api &> /dev/null; then
-        log_warn "Data Plane components not found. It's recommended to install Data Plane first."
-        read -p "Continue anyway? (yes/no) " -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-            log_error "Installation aborted"
-            exit 1
-        fi
     fi
 }
 
 main() {
     verify_environment "$ENVIRONMENT"
     prompt_for_namespace
+    prompt_for_data_plane_api_url
+    prompt_for_control_plane_jwt_secret
     check_prerequisites
     install_control_plane
 }

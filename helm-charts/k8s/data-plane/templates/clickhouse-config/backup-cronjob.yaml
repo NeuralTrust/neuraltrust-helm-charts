@@ -12,7 +12,8 @@ spec:
         spec:
           containers:
             - name: backup
-              image: curlimages/curl
+              image: {{ .Values.clickhouse.backup.image.repository }}:{{ .Values.clickhouse.backup.image.tag }}
+              imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
                 - -ec
@@ -37,5 +38,7 @@ spec:
                     secretKeyRef:
                       name: clickhouse
                       key: admin-password
+              resources:
+                {{- toYaml .Values.clickhouse.backup.resources | nindent 16 }}
           restartPolicy: OnFailure
 {{- end }}

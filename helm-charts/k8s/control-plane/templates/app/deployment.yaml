@@ -26,6 +26,7 @@ spec:
             echo "POSTGRES_HOST: $POSTGRES_HOST"
             echo "POSTGRES_PORT: $POSTGRES_PORT"
             echo "POSTGRES_DATABASE: $POSTGRES_DATABASE"
+            echo "DATABASE_URL: $DATABASE_URL"
             
             # Check if PostgreSQL is ready
             until nc -z -w 2 $POSTGRES_HOST $POSTGRES_PORT; do
@@ -43,14 +44,14 @@ spec:
             # Try to find prisma in the image's node_modules
             if [ -f /app/node_modules/.bin/prisma ]; then
               echo "Using Prisma from /app/node_modules/.bin/prisma"
-              /app/node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              /app/node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             elif [ -f /node_modules/.bin/prisma ]; then
               echo "Using Prisma from /node_modules/.bin/prisma"
-              /node_modules/.bin/prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              /node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             else
               echo "Prisma CLI not found in node_modules, using npx as fallback"
               # Use npx with --prefer-offline to avoid network access if possible
-              npx --prefer-offline prisma db push --schema=/app/prisma/schema.prisma --skip-generate
+              npx --prefer-offline prisma migrate deploy --schema=/app/prisma/schema.prisma
             fi
             
             echo "Database migrations completed successfully"
@@ -80,24 +81,34 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
-        - name: POSTGRES_PRISMA_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
         - name: DATABASE_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: DATABASE_URL
+        - name: POSTGRES_PRISMA_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PRISMA_URL
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
           value: "https://{{ .Values.controlPlane.components.app.config.apiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: data-plane-jwt-secret
-              key: DATA_PLANE_JWT_SECRET
+              name: {{ .Release.Name }}-secrets
+              key: CONTROL_PLANE_JWT_SECRET
+        resources:
+          {{- toYaml .Values.controlPlane.components.app.initContainer.resources | nindent 10 }}
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.app.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: app
         image: "{{ .Values.controlPlane.components.app.image.repository }}:{{ .Values.controlPlane.components.app.image.tag }}"
@@ -136,19 +147,27 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: DATABASE_URL
         - name: POSTGRES_PRISMA_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)?connection_limit=15"
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PRISMA_URL
         - name: RESEND_API_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-api-key
-        - name: SENDER
+        - name: RESEND_SENDER
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
-              key: resend-invite-sender
-        - name: CLERK_PUBLISHABLE_KEY
+              key: resend-alert-sender
+        - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
@@ -188,7 +207,7 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openai-secrets
+              name: {{ .Release.Name }}-secrets
               key: OPENAI_API_KEY
         - name: OPENAI_MODEL
           value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
@@ -197,7 +216,7 @@ spec:
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
           value: "https://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"

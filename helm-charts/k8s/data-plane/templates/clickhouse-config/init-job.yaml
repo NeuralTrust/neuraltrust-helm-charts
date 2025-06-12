@@ -47,19 +47,14 @@ spec:
                   name: clickhouse-secrets
                   key: CLICKHOUSE_DATABASE
           resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "200m"
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
           volumeMounts:
             - name: init-db
               mountPath: /init-db
       volumes:
         - name: init-db
           configMap:
-            name: {{ .Release.Name }}-clickhouse-init
+            name: {{ .Values.clickhouse.configmap.name | default "clickhouse-init-job" }}
             items:
               - key: init-db.sql
                 path: init-db.sql 

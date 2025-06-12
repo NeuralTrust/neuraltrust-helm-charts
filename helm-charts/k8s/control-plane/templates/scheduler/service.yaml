@@ -5,41 +5,37 @@ metadata:
   labels:
     app: {{ .Release.Name }}-scheduler
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 3000
       name: http
   selector:
     app: {{ .Release.Name }}-scheduler
+{{- if .Values.global.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Release.Name }}-scheduler-ingress"
+  {{- if .Values.global.ingress.annotations }}
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    nginx.ingress.kubernetes.io/x-frame-options: "DENY"
-    nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
-    nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.neuraltrust.ai, https://dev.neuraltrust.ai, http://localhost:3000, https://dashboard.neuraltrust.ai, https://*"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
-    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    {{- toYaml .Values.global.ingress.annotations | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: nginx
+  {{- if .Values.global.ingress.className }}
+  ingressClassName: {{ .Values.global.ingress.className }}
+  {{- end }}
+  {{- if .Values.global.ingress.tls.enabled }}
   tls:
     - hosts:
         - {{ .Values.controlPlane.components.scheduler.host | quote }}
+      {{- if .Values.global.ingress.tls.secretName }}
+      secretName: {{ .Values.global.ingress.tls.secretName }}
+      {{- else }}
       secretName: "{{ .Release.Name }}-scheduler-tls"
+      {{- end }}
+  {{- end }}
   rules:
     - host: {{ .Values.controlPlane.components.scheduler.host | quote }}
       http:
@@ -50,4 +46,5 @@ spec:
               service:
                 name: "{{ .Release.Name }}-scheduler-service"
                 port:
-                  number: 80
+                  name: http
+{{- end }}

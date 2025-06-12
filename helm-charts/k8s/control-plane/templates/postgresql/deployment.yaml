@@ -15,11 +15,26 @@ spec:
       labels:
         app: {{ .Release.Name }}-postgresql
     spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
       imagePullSecrets:
         {{- toYaml .Values.postgresql.imagePullSecrets | nindent 10 }}
       containers:
       - name: postgresql
         image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 999
+          runAsGroup: 999
+          seccompProfile:
+            type: RuntimeDefault
         imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
         ports:
         - containerPort: 5432
@@ -42,6 +57,8 @@ spec:
               key: POSTGRES_DB
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: "md5"
         volumeMounts:
         - name: postgresql-data
           mountPath: /var/lib/postgresql/data
@@ -50,23 +67,23 @@ spec:
         livenessProbe:
           exec:
             command:
-            - pg_isready
-            - -U
-            - $(POSTGRES_USER)
-          initialDelaySeconds: 30
+            - sh
+            - -c
+            - "PGPASSWORD=$POSTGRES_PASSWORD pg_isready -h localhost -p 5432 -U $POSTGRES_USER"
+          initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 5
+          timeoutSeconds: 10
           successThreshold: 1
           failureThreshold: 3
         readinessProbe:
           exec:
             command:
-            - pg_isready
-            - -U
-            - $(POSTGRES_USER)
-          initialDelaySeconds: 5
+            - sh
+            - -c
+            - "PGPASSWORD=$POSTGRES_PASSWORD pg_isready -h localhost -p 5432 -U $POSTGRES_USER"
+          initialDelaySeconds: 30
           periodSeconds: 10
-          timeoutSeconds: 5
+          timeoutSeconds: 10
           successThreshold: 1
           failureThreshold: 3
       volumes:

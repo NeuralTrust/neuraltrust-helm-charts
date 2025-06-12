@@ -6,6 +6,17 @@ global:
   issuer:
     name: "letsencrypt-prod"
     server: "https://acme-v02.api.letsencrypt.org/directory"
+  # Ingress configuration for Kubernetes
+  ingress:
+    enabled: true
+    className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
+    annotations: {}
+      # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      # cert-manager.io/issuer: "letsencrypt-prod"
+    tls:
+      enabled: true
+      secretName: ""  # Leave empty to auto-generate per-service secrets
   # Network policies
   network:
     controlPlaneCidr: "10.0.0.0/16"
@@ -13,27 +24,36 @@ global:
     clientDataPlaneCidr: ""
     clientVpnCidr: ""
     excludedClientRanges: []
-  ingress:
-    enabled: true
-    controller:
-      enabled: true  # Set to false to skip installing the ingress controller
-  certManager:
-    enabled: true  # Set to false to skip installing cert-manager
   resend:
-    apiKey: "${RESEND_API_KEY}"
-    alertSender: "${RESEND_ALERT_SENDER}"
-    inviteSender: "${RESEND_INVITE_SENDER}"
+    apiKey: ""  # Define this value, or set it via --set or environment-specific values
+    alertSender: ""  # Define this value, or set it via --set or environment-specific values
+    inviteSender: ""  # Define this value, or set it via --set or environment-specific values
   clerk:
-    publishableKey: "${CLERK_PUBLISHABLE_KEY}"
-    secretKey: "${CLERK_SECRET_KEY}"
-    webhookSecretSessions: "${CLERK_WEBHOOK_SECRET_SESSIONS}"
-    webhookSecretUsers: "${CLERK_WEBHOOK_SECRET_USERS}"
-    authorizationCallbackUrl: "${CLERK_AUTHORIZATION_CALLBACK_URL}"
-    signInUrl: "${CLERK_SIGN_IN_URL}"
-    signUpUrl: "${CLERK_SIGN_UP_URL}"
+    publishableKey: ""  # Define this value, or set it via --set or environment-specific values
+    secretKey: ""  # Define this value, or set it via --set or environment-specific values
+    webhookSecretSessions: ""  # Define this value, or set it via --set or environment-specific values
+    webhookSecretUsers: ""  # Define this value, or set it via --set or environment-specific values
+    authorizationCallbackUrl: ""  # Define this value, or set it via --set or environment-specific values
+    signInUrl: ""  # Define this value, or set it via --set or environment-specific values
+    signUpUrl: ""  # Define this value, or set it via --set or environment-specific values
+
+# Kafka configuration - consolidated from multiple locations
+kafka:
+  enabled: true
+  connect:
+    replicas: 1
+    image: confluentinc/cp-server-connect:7.7.0
+    imagePullSecrets:
+      - name: ""
+  broker:
+    replicas: 1
+    imagePullSecrets:
+      - name: ""
+  ui:
+    image: provectuslabs/kafka-ui:v0.7.2
 
 cert-manager:
-  enabled: ${global.certManager.enabled}
+  enabled: false  # Changed from ${global.certManager.enabled}
   email: victor.garcia@neuraltrust.ai
   issuer:
     dns01:
@@ -46,16 +66,19 @@ clickhouse:
   backup:
     enabled: false
     type: "s3"  # s3 or gcs
+    image:
+      repository: "curlimages/curl"
+      tag: "8.13.0"
     s3:
-      bucket: "${S3_BUCKET}"
-      region: "${S3_REGION}"
-      accessKey: "${S3_ACCESS_KEY}"
-      secretKey: "${S3_SECRET_KEY}"
-      endpoint: "${S3_ENDPOINT}"  # Optional, for custom S3-compatible endpoints
+      bucket: ""  # Define this value, or set it via --set or environment-specific values
+      region: ""  # Define this value, or set it via --set or environment-specific values
+      accessKey: ""  # Define this value, or set it via --set or environment-specific values
+      secretKey: ""  # Define this value, or set it via --set or environment-specific values
+      endpoint: ""  # Optional, for custom S3-compatible endpoints
     gcs:
-      bucket: "${GCS_BUCKET}"
-      accessKey: "${GCS_ACCESS_KEY}"
-      secretKey: "${GCS_SECRET_KEY}"
+      bucket: ""  # Define this value, or set it via --set or environment-specific values
+      accessKey: ""  # Define this value, or set it via --set or environment-specific values
+      secretKey: ""  # Define this value, or set it via --set or environment-specific values
   auth:
     username: "neuraltrust"
   image:
@@ -70,28 +93,37 @@ controlPlane:
   components:
     scheduler:
       enabled: true
-      host: "${CONTROL_PLANE_SCHEDULER_URL}"
+      replicaCount: 1  # Standardized naming
+      host: ""
       image:
-        repository: "${CONTROL_PLANE_SCHEDULER_IMAGE_REPOSITORY}"
-        tag: "${CONTROL_PLANE_SCHEDULER_IMAGE_TAG}"
-        pullPolicy: "${CONTROL_PLANE_SCHEDULER_IMAGE_PULL_POLICY}"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler"
+        tag: "latest"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
       env:
-        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
+        dataPlaneApiUrl: ""  # Define this value, or set it via --set or environment-specific values
         dataPlaneApiVersion: v1
-        dataPlaneJwtSecret: "${DATA_PLANE_JWT_SECRET}"
+        dataPlaneJwtSecret: ""  # Define this value, or set it via --set or environment-specific values
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 200m
     api:
       enabled: true
+      replicaCount: 2  # Standardized naming
       image:
-        repository: "${API_IMAGE_REPOSITORY}"
-        tag: "${API_IMAGE_TAG}"
-        pullPolicy: "${API_IMAGE_PULL_POLICY}"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
+        tag: "latest"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${CONTROL_PLANE_API_URL}"
+      host: ""
       secrets:
-        controlPlaneJWTSecret: "${CONTROL_PLANE_JWT_SECRET}"
+        controlPlaneJWTSecret: ""  # Define this value, or set it via --set or environment-specific values
       resources:
         requests:
           memory: 512Mi
@@ -103,19 +135,19 @@ controlPlane:
       enabled: true
       replicaCount: 1
       image:
-        repository: "${WEBAPP_IMAGE_REPOSITORY}"
-        tag: "${WEBAPP_IMAGE_TAG}"
-        pullPolicy: "${WEBAPP_IMAGE_PULL_POLICY}"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
+        tag: "latest"
+        pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      host: "${CONTROL_PLANE_APP_URL}"
-      secondaryHost: "${CONTROL_PLANE_APP_SECONDARY_URL}"
+      host: ""
+      secondaryHost: ""
       config:
         nodeEnv: production
         port: 3000
-        controlPlaneApiUrl: "${CONTROL_PLANE_API_URL}"
-        dataPlaneApiUrl: "${DATA_PLANE_API_URL}"
-        openaiModel: "${OPENAI_MODEL}"
+        controlPlaneApiUrl: ""
+        dataPlaneApiUrl: ""  # Define this value, or set it via --set or environment-specific values
+        openaiModel: ""  # Define this value, or set it via --set or environment-specific values
       resources:
         requests:
           memory: 512Mi
@@ -123,25 +155,31 @@ controlPlane:
         limits:
           memory: 1Gi
           cpu: 500m
+
 dataPlane:
   enabled: true
   secrets:
-    # openaiApiKey: "" # Removed: Handled by install script
     openaiApiKeySecretName: "openai-secrets" # Secret name for OpenAI key
-    # googleApiKey: "" # Removed: Handled by install script
+    openaiApiKey: ""  # Define this value, or set it via --set or environment-specific values
     googleApiKeySecretName: "google-secrets" # Secret name for Google key
+    googleApiKey: ""  # Define this value, or set it via --set or environment-specific values
+    resendApiKeySecretName: "resend-secrets" # Secret name for Resend key
+    resendApiKey: ""  # Define this value, or set it via --set or environment-specific values
+    dataPlaneJWTSecretName: "data-plane-jwt-secret" # Secret name for Data Plane JWT
+    dataPlaneJWTSecret: ""  # Define this value, or set it via --set or environment-specific values
   components:
     api:
       enabled: true
+      replicaCount: 2  # Standardized naming
       image:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
         tag: latest
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
-      host: "${DATA_PLANE_API_URL}"
+      host: ""
       accessMode: ReadWriteOnce
-      huggingfaceToken: "${HUGGINGFACE_TOKEN}"
+      huggingfaceToken: ""  # Define this value, or set it via --set or environment-specific values
       storage: 10Gi
       # TrustTest Configuration (.trusttest_config.json)
       trustTestConfig:
@@ -167,16 +205,6 @@ dataPlane:
         limits:
           cpu: 400m
           memory: 1Gi
-    kafka:
-      enabled: true
-      connect:
-        replicas: 1
-        imagePullSecrets:
-          - name: ""
-      broker:
-        replicas: 1
-        imagePullSecrets:
-          - name: ""
     worker:
       enabled: true
       replicas: 1
@@ -193,9 +221,11 @@ dataPlane:
         limits:
           memory: 8Gi
           cpu: 2000m
+    connectorsJob: # New section for the create-connectors job
+      image: curlimages/curl:8.13.0 # Default image for create-connectors job
 
 postgresql:
-  enabled: ${global.postgresql.enabled}
+  enabled: false  # Changed from ${global.postgresql.enabled}
   image:
     repository: "postgres"
     tag: "15-alpine"

@@ -16,8 +16,10 @@ spec:
         app: {{ .Release.Name }}-api
         plane: control
     spec:
+      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.api.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
       - name: {{ .Release.Name }}-api
         image: "{{ .Values.controlPlane.components.api.image.repository }}:{{ .Values.controlPlane.components.api.image.tag }}"
@@ -57,10 +59,10 @@ spec:
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: control-plane-jwt-secret
+              name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openai-secrets
+              name: {{ .Release.Name }}-secrets
               key: OPENAI_API_KEY

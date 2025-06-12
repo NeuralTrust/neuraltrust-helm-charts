@@ -16,8 +16,10 @@ spec:
         app: api
         plane: data
     spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
         - name: gcr-secret
+      {{- end }}
       containers:
       - name: api
         image: "{{ .Values.dataPlane.components.api.image.repository }}:{{ .Values.dataPlane.components.api.image.tag }}"
@@ -30,22 +32,23 @@ spec:
           - name: DATA_PLANE_JWT_SECRET
             valueFrom:
               secretKeyRef:
-                name: data-plane-jwt-secret
+                name: {{ .Values.dataPlane.secrets.dataPlaneJWTSecretName }}
                 key: DATA_PLANE_JWT_SECRET
-        {{- if .Values.dataPlane.secrets.openaiApiKeySecretName }}
           - name: OPENAI_API_KEY
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
                 key: OPENAI_API_KEY
-        {{- end }}
-        {{- if .Values.dataPlane.secrets.googleApiKeySecretName }}
           - name: GOOGLE_API_KEY
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
                 key: GOOGLE_API_KEY
-        {{- end }}
+          - name: RESEND_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.resendApiKeySecretName }}
+                key: RESEND_API_KEY
           - name: KAFKA_BOOTSTRAP_SERVERS
             value: "kafka:9092"
           - name: HF_HOME
@@ -79,11 +82,6 @@ spec:
               secretKeyRef:
                 name: clickhouse
                 key: admin-password
-          - name: RESEND_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: resend-secrets
-                key: RESEND_API_KEY
         volumeMounts:
           - name: huggingface-cache
             mountPath: "/root/.cache/huggingface"
