@@ -26,21 +26,6 @@ global:
     signInUrl: ""  # Define this value, or set it via --set or environment-specific values
     signUpUrl: ""  # Define this value, or set it via --set or environment-specific values
 
-# Kafka configuration - consolidated from multiple locations
-kafka:
-  enabled: true
-  connect:
-    replicas: 1
-    image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
-    imagePullSecrets:
-      - name: ""
-  broker:
-    replicas: 1
-    imagePullSecrets:
-      - name: ""
-  ui:
-    image: provectuslabs/kafka-ui:v0.7.2
-
 cert-manager:
   enabled: false  # Changed from ${global.certManager.enabled}
   email: victor.garcia@neuraltrust.ai
@@ -49,33 +34,6 @@ cert-manager:
       enabled: false
     name: "letsencrypt-prod"
     server: "https://acme-v02.api.letsencrypt.org/directory"
-
-clickhouse:
-  enabled: true
-  backup:
-    enabled: false
-    type: "s3"  # s3 or gcs
-    image:
-      repository: "curlimages/curl"
-      tag: "8.13.0"
-    s3:
-      bucket: ""  # Define this value, or set it via --set or environment-specific values
-      region: ""  # Define this value, or set it via --set or environment-specific values
-      accessKey: ""  # Define this value, or set it via --set or environment-specific values
-      secretKey: ""  # Define this value, or set it via --set or environment-specific values
-      endpoint: ""  # Optional, for custom S3-compatible endpoints
-    gcs:
-      bucket: ""  # Define this value, or set it via --set or environment-specific values
-      accessKey: ""  # Define this value, or set it via --set or environment-specific values
-      secretKey: ""  # Define this value, or set it via --set or environment-specific values
-  auth:
-    username: "neuraltrust"
-  image:
-    repository: "clickhouse/clickhouse-server"
-    tag: "25.3.2"
-    pullPolicy: "Always"
-    imagePullSecrets:
-      - name: ""
 
 controlPlane:
   enabled: true
@@ -157,6 +115,62 @@ dataPlane:
     dataPlaneJWTSecretName: "data-plane-jwt-secret" # Secret name for Data Plane JWT
     dataPlaneJWTSecret: ""  # Define this value, or set it via --set or environment-specific values
   components:
+    clickhouse:
+      enabled: true
+      backup:
+        enabled: false
+        type: "s3"  # s3 or gcs
+        image:
+          repository: "curlimages/curl"
+          tag: "8.13.0"
+        s3:
+          bucket: ""  # Define this value, or set it via --set or environment-specific values
+          region: ""  # Define this value, or set it via --set or environment-specific values
+          accessKey: ""  # Define this value, or set it via --set or environment-specific values
+          secretKey: ""  # Define this value, or set it via --set or environment-specific values
+          endpoint: ""  # Optional, for custom S3-compatible endpoints
+        gcs:
+          bucket: ""  # Define this value, or set it via --set or environment-specific values
+          accessKey: ""  # Define this value, or set it via --set or environment-specific values
+          secretKey: ""  # Define this value, or set it via --set or environment-specific values
+      auth:
+        username: "neuraltrust"
+      image:
+        repository: "clickhouse/clickhouse-server"
+        tag: "25.3.2"
+        pullPolicy: "Always"
+        imagePullSecrets:
+          - name: ""
+      # Connection configuration
+      host: "clickhouse"
+      port: "8123"
+      user: "neuraltrust"
+      database: "neuraltrust"
+      # Configuration references
+      secrets:
+        name: "clickhouse-secrets"
+      configmap:
+        name: "clickhouse-init-job"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+    kafka:
+      enabled: true
+      connect:
+        replicas: 1
+        image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
+        imagePullSecrets:
+          - name: ""
+      broker:
+        replicas: 1
+        imagePullSecrets:
+          - name: ""
+      ui:
+        image: provectuslabs/kafka-ui:v0.7.2
     api:
       enabled: true
       replicaCount: 2  # Standardized naming

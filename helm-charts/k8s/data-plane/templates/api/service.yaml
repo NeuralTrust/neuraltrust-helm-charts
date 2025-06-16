@@ -5,39 +5,39 @@ metadata:
   labels:
     app: api
 spec:
-  type: ClusterIP
+  type: {{ .Values.dataPlane.components.api.service.type }}
   ports:
     - port: 80
       targetPort: 8000
       name: http
   selector:
     app: api
-{{- if .Values.global.ingress.enabled }}
+{{- if .Values.dataPlane.components.api.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Release.Name }}-api-ingress"
-  {{- if .Values.global.ingress.annotations }}
+  {{- if .Values.dataPlane.components.api.ingress.annotations }}
   annotations:
-    {{- toYaml .Values.global.ingress.annotations | nindent 4 }}
+    {{- toYaml .Values.dataPlane.components.api.ingress.annotations | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.global.ingress.className }}
-  ingressClassName: {{ .Values.global.ingress.className }}
+  {{- if .Values.dataPlane.components.api.ingress.className }}
+  ingressClassName: {{ .Values.dataPlane.components.api.ingress.className }}
   {{- end }}
-  {{- if .Values.global.ingress.tls.enabled }}
+  {{- if .Values.dataPlane.components.api.ingress.tls.enabled }}
   tls:
     - hosts:
-        - "{{ .Values.dataPlane.components.api.host }}"
-      {{- if .Values.global.ingress.tls.secretName }}
-      secretName: {{ .Values.global.ingress.tls.secretName }}
+        - "{{ .Values.dataPlane.components.api.ingress.host }}"
+      {{- if .Values.dataPlane.components.api.ingress.tls.secretName }}
+      secretName: {{ .Values.dataPlane.components.api.ingress.tls.secretName }}
       {{- else }}
       secretName: "{{ .Release.Name }}-api-tls"
       {{- end }}
   {{- end }}
   rules:
-    - host: "{{ .Values.dataPlane.components.api.host }}"
+    - host: "{{ .Values.dataPlane.components.api.ingress.host }}"
       http:
         paths:
           - path: /

@@ -16,7 +16,7 @@ spec:
         {{- toYaml .Values.dataPlane.components.kafka.imagePullSecrets | nindent 10 }}
       containers:
         - name: kafka-connect
-          image: {{ .Values.global.kafka.connect.image | quote }}
+          image: {{ .Values.dataPlane.components.kafka.connect.image | quote }}
           ports:
             - containerPort: 8083
           env:

@@ -188,40 +188,6 @@ prompt_for_huggingface_token() {
     fi
 }
 
-# Function to install ingress-nginx
-install_ingress_nginx() {
-    log_info "Installing ingress-nginx controller..."
-    
-    # Check if ingress-nginx is already installed
-    if helm list -n $NAMESPACE | grep -q ingress-nginx; then
-        log_info "ingress-nginx is already installed, skipping..."
-        return 0
-    fi
-    
-    # Create ingress-nginx namespace if it doesn't exist
-    if ! kubectl get namespace $NAMESPACE &> /dev/null; then
-        log_info "Creating ingress-nginx namespace..."
-        kubectl create namespace $NAMESPACE
-    fi
-    
-    # Install ingress-nginx using the local chart
-    helm upgrade --install ingress-nginx ./helm-charts/shared-charts/ingress-nginx \
-        --namespace $NAMESPACE \
-        --set controller.service.type=LoadBalancer \
-        --wait --timeout=10m
-    
-    log_info "ingress-nginx controller installed successfully!"
-    
-    # Wait for the ingress controller to be ready
-    log_info "Waiting for ingress controller to be ready..."
-    kubectl wait --namespace $NAMESPACE \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/component=controller \
-        --timeout=300s
-    
-    log_info "ingress-nginx controller is ready!"
-}
-
 create_data_plane_secrets() {
     log_info "Creating data plane secrets..."
 
@@ -342,9 +308,7 @@ install_data_plane() {
     create_namespace_if_not_exists
 
     # Install ingress-nginx controller first
-    if [ "$SKIP_INGRESS" = false ]; then
-        install_ingress_nginx
-    else
+    if [ "$SKIP_INGRESS" = true ]; then
         log_info "Skipping ingress-nginx installation as requested"
         log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
         log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
@@ -384,24 +348,24 @@ install_data_plane() {
     
     # Add API host if specified
     if [ -n "$DATA_PLANE_API_URL" ]; then
-        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.host=$DATA_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.components.ingress.host=$DATA_PLANE_API_URL")
     fi
     
     # Add backup configuration if specified
     if [ -n "$CLICKHOUSE_BACKUP_TYPE" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
     fi
     if [ -n "$S3_BUCKET" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.bucket=$S3_BUCKET")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.bucket=$S3_BUCKET")
     fi
     if [ -n "$S3_REGION" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.region=$S3_REGION")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.region=$S3_REGION")
     fi
     if [ -n "$S3_ENDPOINT" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
     fi
     if [ -n "$GCS_BUCKET" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.gcs.bucket=$GCS_BUCKET")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.gcs.bucket=$GCS_BUCKET")
     fi
     
     # Add image overrides if specified (for development/testing)
@@ -423,16 +387,16 @@ install_data_plane() {
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
-        --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
+        --set dataPlane.secrets.huggingFaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
         --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
         --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-        --set clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
-        --set clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
-        --set clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
-        --set clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
-        --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+        --set dataPlane.components.clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
+        --set dataPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         "${OPTIONAL_OVERRIDES[@]}" \
         --wait
 

@@ -5,39 +5,39 @@ metadata:
   labels:
     app: {{ .Release.Name }}-scheduler
 spec:
-  type: ClusterIP
+  type: {{ .Values.controlPlane.components.scheduler.service.type }}
   ports:
     - port: 80
       targetPort: 3000
       name: http
   selector:
     app: {{ .Release.Name }}-scheduler
-{{- if .Values.global.ingress.enabled }}
+{{- if .Values.controlPlane.components.scheduler.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Release.Name }}-scheduler-ingress"
-  {{- if .Values.global.ingress.annotations }}
+  {{- if .Values.controlPlane.components.scheduler.ingress.annotations }}
   annotations:
-    {{- toYaml .Values.global.ingress.annotations | nindent 4 }}
+    {{- toYaml .Values.controlPlane.components.scheduler.ingress.annotations | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.global.ingress.className }}
-  ingressClassName: {{ .Values.global.ingress.className }}
+  {{- if .Values.controlPlane.components.scheduler.ingress.className }}
+  ingressClassName: {{ .Values.controlPlane.components.scheduler.ingress.className }}
   {{- end }}
-  {{- if .Values.global.ingress.tls.enabled }}
+  {{- if .Values.controlPlane.components.scheduler.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.controlPlane.components.scheduler.host | quote }}
-      {{- if .Values.global.ingress.tls.secretName }}
-      secretName: {{ .Values.global.ingress.tls.secretName }}
+        - {{ .Values.controlPlane.components.scheduler.ingress.host | quote }}
+      {{- if .Values.controlPlane.components.scheduler.ingress.tls.secretName }}
+      secretName: {{ .Values.controlPlane.components.scheduler.ingress.tls.secretName }}
       {{- else }}
       secretName: "{{ .Release.Name }}-scheduler-tls"
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.controlPlane.components.scheduler.host | quote }}
+    - host: {{ .Values.controlPlane.components.scheduler.ingress.host | quote }}
       http:
         paths:
           - path: /

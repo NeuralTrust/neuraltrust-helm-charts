@@ -167,41 +167,6 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: resend-alert-sender
-        - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-publishable-key
-        - name: CLERK_SECRET_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-secret-key
-        - name: CLERK_WEBHOOK_SECRET_SESSIONS
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-webhook-secret-sessions
-        - name: CLERK_WEBHOOK_SECRET_USERS
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-webhook-secret-users
-        - name: CLERK_AUTHORIZATION_CALLBACK_URL
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-authorization-callback-url
-        - name: CLERK_SIGN_IN_URL
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-sign-in-url
-        - name: CLERK_SIGN_UP_URL
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Release.Name }}-secrets
-              key: clerk-sign-up-url
         - name: APP_URL
           value: "https://{{ .Values.controlPlane.components.app.host }}"
         - name: OPENAI_API_KEY

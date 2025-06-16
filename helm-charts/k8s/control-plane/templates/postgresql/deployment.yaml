@@ -1,4 +1,4 @@
-{{- if .Values.global.postgresql.enabled }}
+{{- if .Values.controlPlane.components.postgresql.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,10 +21,10 @@ spec:
         runAsGroup: 999
         runAsNonRoot: true
       imagePullSecrets:
-        {{- toYaml .Values.postgresql.imagePullSecrets | nindent 10 }}
+        {{- toYaml .Values.controlPlane.components.postgresql.imagePullSecrets | nindent 10 }}
       containers:
       - name: postgresql
-        image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        image: "{{ .Values.controlPlane.components.postgresql.image.repository }}:{{ .Values.controlPlane.components.postgresql.image.tag }}"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -35,7 +35,7 @@ spec:
           runAsGroup: 999
           seccompProfile:
             type: RuntimeDefault
-        imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.controlPlane.components.postgresql.image.pullPolicy }}
         ports:
         - containerPort: 5432
           name: postgresql
@@ -63,7 +63,7 @@ spec:
         - name: postgresql-data
           mountPath: /var/lib/postgresql/data
         resources:
-          {{- toYaml .Values.postgresql.resources | nindent 12 }}
+            {{- toYaml .Values.controlPlane.components.postgresql.resources | nindent 12 }}
         livenessProbe:
           exec:
             command:
@@ -88,7 +88,7 @@ spec:
           failureThreshold: 3
       volumes:
       - name: postgresql-data
-        {{- if .Values.postgresql.persistence.enabled }}
+        {{- if .Values.controlPlane.components.postgresql.persistence.enabled }}
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-postgresql-pvc
         {{- else }}

@@ -54,7 +54,10 @@ spec:
           - name: HF_HOME
             value: "/root/.cache/huggingface"
           - name: HUGGINGFACE_TOKEN
-            value: "{{ .Values.dataPlane.components.api.huggingfaceToken }}"
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.dataPlane.secrets.huggingFaceTokenSecretName }}
+                key: HUGGINGFACE_TOKEN
           - name: PYTHONPATH
             value: "/app"
           - name: CLICKHOUSE_HOST

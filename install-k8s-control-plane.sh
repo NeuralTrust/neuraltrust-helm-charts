@@ -216,40 +216,6 @@ create_gcr_secret() {
     fi
 }
 
-# Function to install ingress-nginx
-install_ingress_nginx() {
-    log_info "Installing ingress-nginx controller..."
-    
-    # Check if ingress-nginx is already installed
-    if helm list -n ingress-nginx | grep -q ingress-nginx; then
-        log_info "ingress-nginx is already installed, skipping..."
-        return 0
-    fi
-    
-    # Create ingress-nginx namespace if it doesn't exist
-    if ! kubectl get namespace ingress-nginx &> /dev/null; then
-        log_info "Creating ingress-nginx namespace..."
-        kubectl create namespace ingress-nginx
-    fi
-    
-    # Install ingress-nginx using the local chart
-    helm upgrade --install ingress-nginx ./helm-charts/shared-charts/ingress-nginx \
-        --namespace ingress-nginx \
-        --set controller.service.type=LoadBalancer \
-        --wait --timeout=10m
-    
-    log_info "ingress-nginx controller installed successfully!"
-    
-    # Wait for the ingress controller to be ready
-    log_info "Waiting for ingress controller to be ready..."
-    kubectl wait --namespace ingress-nginx \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/component=controller \
-        --timeout=300s
-    
-    log_info "ingress-nginx controller is ready!"
-}
-
 install_control_plane() {
     log_info "Installing NeuralTrust Control Plane infrastructure..."
 
@@ -258,9 +224,7 @@ install_control_plane() {
     create_namespace_if_not_exists
 
     # Install ingress-nginx controller first
-    if [ "$SKIP_INGRESS" = false ]; then
-        install_ingress_nginx
-    else
+    if [ "$SKIP_INGRESS" = true ]; then
         log_info "Skipping ingress-nginx installation as requested"
         log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
         log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
@@ -355,26 +319,19 @@ install_control_plane() {
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
-        --set openai.secrets.apiKey="$OPENAI_API_KEY" \
-        --set postgresql.secrets.user="$POSTGRES_USER_FINAL" \
-        --set postgresql.secrets.password="$POSTGRES_PASSWORD" \
-        --set postgresql.secrets.database="$POSTGRES_DB_FINAL" \
-        --set postgresql.secrets.host="$POSTGRES_HOST_FINAL" \
-        --set postgresql.secrets.port="$POSTGRES_PORT_FINAL" \
-        --set global.postgresql.enabled="$INSTALL_POSTGRESQL" \
+        --set controlPlane.secrets.openaiApiKey="$OPENAI_API_KEY" \
+        --set controlPlane.components.postgresql.secrets.user="$POSTGRES_USER_FINAL" \
+        --set controlPlane.components.postgresql.secrets.password="$POSTGRES_PASSWORD" \
+        --set controlPlane.components.postgresql.secrets.database="$POSTGRES_DB_FINAL" \
+        --set controlPlane.components.postgresql.secrets.host="$POSTGRES_HOST_FINAL" \
+        --set controlPlane.components.postgresql.secrets.port="$POSTGRES_PORT_FINAL" \
+        --set controlPlane.components.postgresql.enabled="$INSTALL_POSTGRESQL" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set resend.apiKey="${RESEND_API_KEY:-}" \
-        --set resend.alertSender="${RESEND_ALERT_SENDER:-alerts@example.com}" \
-        --set resend.inviteSender="${RESEND_INVITE_SENDER:-invites@example.com}" \
-        --set clerk.publishableKey="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" \
-        --set clerk.secretKey="${CLERK_SECRET_KEY:-}" \
-        --set clerk.webhookSecretSessions="${CLERK_WEBHOOK_SECRET_SESSIONS:-}" \
-        --set clerk.webhookSecretUsers="${CLERK_WEBHOOK_SECRET_USERS:-}" \
-        --set clerk.authorizationCallbackUrl="${GITHUB_AUTHORIZATION_CALLBACK_URL:-https://app.example.com/auth/callback}" \
-        --set clerk.signInUrl="${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-https://app.example.com/sign-in}" \
-        --set clerk.signUpUrl="${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-https://app.example.com/sign-up}" \
-        --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+        --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
+        --set controlPlane.secrets.resendAlertSender="${RESEND_ALERT_SENDER:-alerts@example.com}" \
+        --set controlPlane.secrets.resendInviteSender="${RESEND_INVITE_SENDER:-invites@example.com}" \
+        --set controlPlane.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         "${OPTIONAL_OVERRIDES[@]}" \
         $ADDITIONAL_VALUES \
         --wait
@@ -418,7 +375,7 @@ install_control_plane() {
                 --reuse-values \
                 --set controlPlane.components.app.config.controlPlaneApiUrl="$ACTUAL_API_HOST" \
                 --set controlPlane.components.scheduler.env.controlPlaneApiUrl="$ACTUAL_API_HOST" \
-                --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+                --set controlPlane.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
                 --timeout 5m \
                 --wait
             
@@ -476,7 +433,7 @@ install_control_plane() {
                 --namespace "$NAMESPACE" \
                 --reuse-values \
                 --set controlPlane.components.scheduler.host="$ACTUAL_SCHEDULER_HOST" \
-                --set global.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+                --set controlPlane.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
                 --timeout 5m \
                 --wait
             

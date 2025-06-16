@@ -1,100 +1,41 @@
-global:
-  postgresql:
-    enabled: false
-  accessMode: ReadWriteOnce
-  classifierModel: "gpt"
-  issuer:
-    name: "letsencrypt-prod"
-    server: "https://acme-v02.api.letsencrypt.org/directory"
-  # Ingress configuration for Kubernetes
-  ingress:
-    enabled: true
-    className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
-    annotations: {}
-      # nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-      # cert-manager.io/issuer: "letsencrypt-prod"
-    tls:
-      enabled: true
-      secretName: ""  # Leave empty to auto-generate per-service secrets
-  # Network policies
-  network:
-    controlPlaneCidr: "10.0.0.0/16"
-    dataPlanecidr: "10.1.0.0/16"
-    clientDataPlaneCidr: ""
-    clientVpnCidr: ""
-    excludedClientRanges: []
-  resend:
-    apiKey: ""  # Define this value, or set it via --set or environment-specific values
-    alertSender: ""  # Define this value, or set it via --set or environment-specific values
-    inviteSender: ""  # Define this value, or set it via --set or environment-specific values
-  clerk:
-    publishableKey: ""  # Define this value, or set it via --set or environment-specific values
-    secretKey: ""  # Define this value, or set it via --set or environment-specific values
-    webhookSecretSessions: ""  # Define this value, or set it via --set or environment-specific values
-    webhookSecretUsers: ""  # Define this value, or set it via --set or environment-specific values
-    authorizationCallbackUrl: ""  # Define this value, or set it via --set or environment-specific values
-    signInUrl: ""  # Define this value, or set it via --set or environment-specific values
-    signUpUrl: ""  # Define this value, or set it via --set or environment-specific values
-
-# Kafka configuration - consolidated from multiple locations
-kafka:
-  enabled: true
-  connect:
-    replicas: 1
-    image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
-    imagePullSecrets:
-      - name: ""
-  broker:
-    replicas: 1
-    imagePullSecrets:
-      - name: ""
-  ui:
-    image: provectuslabs/kafka-ui:v0.7.2
-
-cert-manager:
-  enabled: false  # Changed from ${global.certManager.enabled}
-  email: victor.garcia@neuraltrust.ai
-  issuer:
-    dns01:
-      enabled: false
-    name: "letsencrypt-prod"
-    server: "https://acme-v02.api.letsencrypt.org/directory"
-
-clickhouse:
-  enabled: true
-  backup:
-    enabled: false
-    type: "s3"  # s3 or gcs
-    image:
-      repository: "curlimages/curl"
-      tag: "8.13.0"
-    s3:
-      bucket: ""  # Define this value, or set it via --set or environment-specific values
-      region: ""  # Define this value, or set it via --set or environment-specific values
-      accessKey: ""  # Define this value, or set it via --set or environment-specific values
-      secretKey: ""  # Define this value, or set it via --set or environment-specific values
-      endpoint: ""  # Optional, for custom S3-compatible endpoints
-    gcs:
-      bucket: ""  # Define this value, or set it via --set or environment-specific values
-      accessKey: ""  # Define this value, or set it via --set or environment-specific values
-      secretKey: ""  # Define this value, or set it via --set or environment-specific values
-  auth:
-    username: "neuraltrust"
-  image:
-    repository: "clickhouse/clickhouse-server"
-    tag: "25.3.2"
-    pullPolicy: "Always"
-    imagePullSecrets:
-      - name: ""
-
 controlPlane:
   enabled: true
+  secrets:
+    controlPlaneJWTSecret: ""  # Define this value, or set it via --set or environment-specific values
+    openaiApiKey: ""  # Define this value, or set it via --set or environment-specific values
+    resendApiKey: ""  # Define this value, or set it via --set or environment-specific values
+    resendAlertSender: ""  # Define this value, or set it via --set or environment-specific values
+    resendInviteSender: ""  # Define this value, or set it via --set or environment-specific values
   components:
     scheduler:
       enabled: true
+      service:
+        type: LoadBalancer
+      ingress:
+        host: "control-plane-scheduler.test.neuraltrust.ai"
+        enabled: true
+        className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
+        annotations:
+          cert-manager.io/cluster-issuer: "letsencrypt-issuer"
+          nginx.ingress.kubernetes.io/ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+          nginx.ingress.kubernetes.io/x-frame-options: "DENY"
+          nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
+          nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+          nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+          nginx.ingress.kubernetes.io/enable-cors: "true"
+          nginx.ingress.kubernetes.io/cors-allow-origin: "https://*"
+          nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+          nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
+          nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+        tls:
+          enabled: true
+          secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 1  # Standardized naming
-      host: ""
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler"
         tag: "latest"
@@ -114,6 +55,32 @@ controlPlane:
           cpu: 200m
     api:
       enabled: true
+      service:
+        type: LoadBalancer
+      ingress:
+        host: "control-plane-api.test.neuraltrust.ai"
+        enabled: true
+        className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
+        annotations:
+          cert-manager.io/cluster-issuer: "letsencrypt-issuer"
+          nginx.ingress.kubernetes.io/ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+          nginx.ingress.kubernetes.io/x-frame-options: "DENY"
+          nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
+          nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+          nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+          nginx.ingress.kubernetes.io/enable-cors: "true"
+          nginx.ingress.kubernetes.io/cors-allow-origin: "https://*"
+          nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+          nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
+          nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+        tls:
+          enabled: true
+          secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 2  # Standardized naming
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
@@ -133,6 +100,33 @@ controlPlane:
           cpu: 500m
     app:
       enabled: true
+      service:
+        type: LoadBalancer
+      ingress:
+        host: "control-plane-app.test.neuraltrust.ai"
+        secondaryHost: ""
+        enabled: true
+        className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
+        annotations:
+          cert-manager.io/cluster-issuer: "letsencrypt-issuer"
+          nginx.ingress.kubernetes.io/ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+          nginx.ingress.kubernetes.io/x-frame-options: "DENY"
+          nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
+          nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+          nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+          nginx.ingress.kubernetes.io/enable-cors: "true"
+          nginx.ingress.kubernetes.io/cors-allow-origin: "https://*"
+          nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+          nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
+          nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+        tls:
+          enabled: true
+          secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 1
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
@@ -140,8 +134,6 @@ controlPlane:
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      host: ""
-      secondaryHost: ""
       config:
         nodeEnv: production
         port: 3000
@@ -155,6 +147,43 @@ controlPlane:
         limits:
           memory: 1Gi
           cpu: 500m
+      initContainer:
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 1Gi
+            cpu: 500m
+    postgresql:
+      enabled: false  # Changed from ${global.postgresql.enabled}
+      image:
+        repository: "postgres"
+        tag: "15-alpine"
+        pullPolicy: "IfNotPresent"
+        imagePullSecrets:
+          - name: ""
+      persistence:
+        enabled: true
+        size: 10Gi
+        storageClass: ""
+      secrets:
+        name: "postgresql-secrets"
+        user: "postgres"
+        password: ""  # Define this value, or set it via --set or environment-specific values
+        database: "neuraltrust"
+        host: "postgresql"
+        port: "5432"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+      service:
+        type: ClusterIP
+        port: 5432
 
 dataPlane:
   enabled: true
@@ -167,9 +196,114 @@ dataPlane:
     resendApiKey: ""  # Define this value, or set it via --set or environment-specific values
     dataPlaneJWTSecretName: "data-plane-jwt-secret" # Secret name for Data Plane JWT
     dataPlaneJWTSecret: ""  # Define this value, or set it via --set or environment-specific values
+    huggingFaceTokenSecretName: "huggingface-secrets" # Secret name for Hugging Face token
+    huggingFaceToken: ""  # Define this value, or set it via --set or environment-specific values
   components:
+    clickhouse:
+      enabled: true
+      backup:
+        enabled: false
+        type: "s3"  # s3 or gcs
+        image:
+          repository: "curlimages/curl"
+          tag: "8.13.0"
+        s3:
+          bucket: ""  # Define this value, or set it via --set or environment-specific values
+          region: ""  # Define this value, or set it via --set or environment-specific values
+          accessKey: ""  # Define this value, or set it via --set or environment-specific values
+          secretKey: ""  # Define this value, or set it via --set or environment-specific values
+          endpoint: ""  # Optional, for custom S3-compatible endpoints
+        gcs:
+          bucket: ""  # Define this value, or set it via --set or environment-specific values
+          accessKey: ""  # Define this value, or set it via --set or environment-specific values
+          secretKey: ""  # Define this value, or set it via --set or environment-specific values
+      auth:
+        username: "neuraltrust"
+      image:
+        repository: "clickhouse/clickhouse-server"
+        tag: "25.3.2"
+        pullPolicy: "Always"
+        imagePullSecrets:
+          - name: ""
+      # Connection configuration
+      host: "clickhouse"
+      port: "8123"
+      user: "neuraltrust"
+      database: "neuraltrust"
+      # Configuration references
+      secrets:
+        name: "clickhouse-secrets"
+      configmap:
+        name: "clickhouse-init-job"
+      resources:
+        requests:
+          memory: 512Mi
+          cpu: 250m
+        limits:
+          memory: 1Gi
+          cpu: 500m
+    kafka:
+      enabled: true
+      connect:
+        replicas: 1
+        image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
+        imagePullSecrets:
+          - name: ""
+        resources:
+          limits:
+            cpu: "1"
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 2Gi
+      broker:
+        replicas: 1
+        imagePullSecrets:
+          - name: ""
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 500m
+          limits:
+            memory: 2Gi
+            cpu: 1
+      ui:
+        image: provectuslabs/kafka-ui:v0.7.2
+        resources:
+          limits:
+            cpu: 200m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
     api:
       enabled: true
+      service:
+        type: LoadBalancer
+      ingress:
+        enabled: true
+        host: "data-plane-api.test.neuraltrust.ai" 
+        className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
+        annotations:
+          cert-manager.io/cluster-issuer: "letsencrypt-issuer"
+          nginx.ingress.kubernetes.io/ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+          nginx.ingress.kubernetes.io/x-frame-options: "DENY"
+          nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
+          nginx.ingress.kubernetes.io/x-xss-protection: "1; mode=block"
+          nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+          nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+          nginx.ingress.kubernetes.io/enable-cors: "true"
+          nginx.ingress.kubernetes.io/cors-allow-origin: "https://*"
+          nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+          nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,token,Token,Content-Length,Accept,Origin,Token,token"
+        tls:
+          enabled: true
+          secretName: ""  # Leave empty to auto-generate per-service secrets
+      classifierModel: "gpt"
       replicaCount: 2  # Standardized naming
       image:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
@@ -177,7 +311,6 @@ dataPlane:
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
-      host: ""
       accessMode: ReadWriteOnce
       huggingfaceToken: ""  # Define this value, or set it via --set or environment-specific values
       storage: 10Gi
@@ -223,26 +356,3 @@ dataPlane:
           cpu: 2000m
     connectorsJob: # New section for the create-connectors job
       image: curlimages/curl:8.13.0 # Default image for create-connectors job
-
-postgresql:
-  enabled: false  # Changed from ${global.postgresql.enabled}
-  image:
-    repository: "postgres"
-    tag: "15-alpine"
-    pullPolicy: "IfNotPresent"
-    imagePullSecrets:
-      - name: ""
-  persistence:
-    enabled: true
-    size: 10Gi
-    storageClass: ""
-  resources:
-    requests:
-      memory: 512Mi
-      cpu: 250m
-    limits:
-      memory: 1Gi
-      cpu: 500m
-  service:
-    type: ClusterIP
-    port: 5432

@@ -16,7 +16,7 @@ spec:
         {{- toYaml .Values.dataPlane.components.kafka.imagePullSecrets | nindent 10 }}
       containers:
         - name: kafka-connect
-          image: {{ .Values.global.kafka.connect.image | quote }}
+          image: {{ .Values.dataPlane.components.kafka.connect.image | quote }}
           ports:
             - containerPort: 8083
           readinessProbe:
@@ -108,7 +108,7 @@ spec:
     spec:
       containers:
       - name: kafka-ui
-        image: {{ .Values.global.kafka.ui.image | quote }}
+        image: {{ .Values.dataPlane.components.kafka.ui.image | quote }}
         env:
         - name: KAFKA_CLUSTERS_0_NAME
           value: "K8 Kafka Cluster"
@@ -181,6 +181,3 @@ spec:
           name: connector-scripts
           defaultMode: 0755
       restartPolicy: OnFailure
-
-
-europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect:latest

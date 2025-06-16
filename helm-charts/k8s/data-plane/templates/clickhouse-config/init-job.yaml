@@ -18,8 +18,8 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: clickhouse-init
-          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
-          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          image: "{{ .Values.dataPlane.components.clickhouse.image.repository }}:{{ .Values.dataPlane.components.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.dataPlane.components.clickhouse.image.pullPolicy }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -47,14 +47,14 @@ spec:
                   name: clickhouse-secrets
                   key: CLICKHOUSE_DATABASE
           resources:
-            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+            {{- toYaml .Values.dataPlane.components.clickhouse.resources | nindent 12 }}
           volumeMounts:
             - name: init-db
               mountPath: /init-db
       volumes:
         - name: init-db
           configMap:
-            name: {{ .Values.clickhouse.configmap.name | default "clickhouse-init-job" }}
+            name: {{ .Values.dataPlane.components.clickhouse.configmap.name | default "clickhouse-init-job" }}
             items:
               - key: init-db.sql
                 path: init-db.sql 
