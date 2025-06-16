@@ -10,11 +10,12 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-charts/openshift/values.yaml"
+VALUES_FILE="helm-charts/values-neuraltrust.yaml"
 
 # Parse command line arguments
 RELEASE_NAME="data-plane"
 AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
+SKIP_INGRESS=false # if true, skips ingress-nginx installation
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -33,8 +34,18 @@ while [[ $# -gt 0 ]]; do
       AVOID_NEURALTRUST_PRIVATE_REGISTRY=true
       shift
       ;;
+    --skip-ingress)
+      SKIP_INGRESS=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
+      echo "Usage: $0 [options]"
+      echo "Options:"
+      echo "  --namespace <namespace>                      Set the namespace (default: neuraltrust)"
+      echo "  --release-name <name>                        Set the release name (default: data-plane)"
+      echo "  --avoid-neuraltrust-private-registry         Use public images instead of NeuralTrust private registry"
+      echo "  --skip-ingress                               Skip ingress-nginx controller installation"
       exit 1
       ;;
   esac
@@ -101,13 +112,13 @@ prompt_for_namespace() {
 
 # Function to create namespace if it doesn't exist
 create_namespace_if_not_exists() {
-    if ! oc get project "$NAMESPACE" &> /dev/null; then
-        log_info "Project $NAMESPACE does not exist. Creating..."
-        oc new-project "$NAMESPACE"
-        log_info "Project $NAMESPACE created successfully"
+    if ! kubectl get namespace "$NAMESPACE" &> /dev/null; then
+        log_info "Namespace $NAMESPACE does not exist. Creating..."
+        kubectl create namespace "$NAMESPACE"
+        log_info "Namespace $NAMESPACE created successfully"
     else
-        log_info "Project $NAMESPACE already exists. Switching to it."
-        oc project "$NAMESPACE"
+        log_info "Namespace $NAMESPACE runningrun."
+        kubectl config set-context --current --namespace="$NAMESPACE"
     fi
 }
 
@@ -230,16 +241,16 @@ create_data_plane_secrets() {
         fi
         
         # Create the secret
-        oc create -n "$NAMESPACE" secret docker-registry gcr-secret \
+        kubectl create -n "$NAMESPACE" secret docker-registry gcr-secret \
             --docker-server=europe-west1-docker.pkg.dev \
             --docker-username=_json_key \
             --docker-password="$GCR_KEY" \
             --docker-email=admin@neuraltrust.ai \
-            --dry-run=client -o yaml | oc apply -f -
+            --dry-run=client -o yaml | kubectl apply -f -
         
         log_info "GCR secret created successfully"
     else
-        log_info "Skipping GCR secret creation as OpenShift ImageStream will be used."
+        log_info "Skipping GCR secret creation as public images will be used."
     fi
 }
 
@@ -248,7 +259,7 @@ install_databases() {
     CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
 
     # Determine ClickHouse image repository
-    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./helm-charts/shared-charts/clickhouse}"
+    CLICKHOUSE_IMAGE_REPO_FINAL="${CLICKHOUSE_IMAGE_REPOSITORY:-./helm-charts/clickhouse}"
     log_info "Using ClickHouse image repository: $CLICKHOUSE_IMAGE_REPO_FINAL"
 
     # Determine ClickHouse chart version
@@ -259,7 +270,7 @@ install_databases() {
     helm upgrade --install clickhouse "$CLICKHOUSE_IMAGE_REPO_FINAL" \
         --namespace "$NAMESPACE" \
         --version "$CLICKHOUSE_CHART_VERSION_FINAL" \
-        -f helm-charts/openshift/values-clickhouse.yaml \
+        -f helm-charts/values-clickhouse.yaml \
         --set auth.password="$CLICKHOUSE_PASSWORD" \
         --wait
 
@@ -273,7 +284,7 @@ install_messaging() {
     log_info "Installing messaging system..."
 
     # Determine Kafka image repository
-    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./helm-charts/shared-charts/kafka}"
+    KAFKA_IMAGE_REPO_FINAL="${KAFKA_IMAGE_REPOSITORY:-./helm-charts/kafka}"
     log_info "Using Kafka image repository: $KAFKA_IMAGE_REPO_FINAL"
 
     # Determine Kafka chart version
@@ -284,7 +295,7 @@ install_messaging() {
     helm upgrade --install kafka "$KAFKA_IMAGE_REPO_FINAL" \
         --version "$KAFKA_CHART_VERSION_FINAL" \
         --namespace "$NAMESPACE" \
-        -f helm-charts/openshift/values-kafka.yaml \
+        -f helm-charts/values-kafka.yaml \
         --wait
 }
 
@@ -296,9 +307,13 @@ install_data_plane() {
     prompt_for_namespace
     create_namespace_if_not_exists
 
-    # Grant image pull permissions to the default service account in the namespace
-    log_info "Granting image pull permissions to default service account in namespace '$NAMESPACE'..."
-    oc policy add-role-to-user system:image-puller "system:serviceaccount:${NAMESPACE}:default" -n "$NAMESPACE"
+    # Install ingress-nginx controller first
+    if [ "$SKIP_INGRESS" = true ]; then
+        log_info "Skipping ingress-nginx installation as requested"
+        log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
+        log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
+        log_warn "  kubectl port-forward -n $NAMESPACE svc/data-plane-api-service 8000:80"
+    fi
     
     # Prompt for API keys and validate
     prompt_for_openai_api_key
@@ -315,7 +330,7 @@ install_data_plane() {
     # Install messaging system
     install_messaging
 
-    # Install data plane components for SaaS
+    # Install data plane components for Kubernetes
     log_info "Installing data plane components..."
 
     FINAL_DATA_PLANE_API_URL=""
@@ -333,24 +348,24 @@ install_data_plane() {
     
     # Add API host if specified
     if [ -n "$DATA_PLANE_API_URL" ]; then
-        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.host=$DATA_PLANE_API_URL")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.api.components.ingress.host=$DATA_PLANE_API_URL")
     fi
     
     # Add backup configuration if specified
     if [ -n "$CLICKHOUSE_BACKUP_TYPE" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.type=$CLICKHOUSE_BACKUP_TYPE")
     fi
     if [ -n "$S3_BUCKET" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.bucket=$S3_BUCKET")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.bucket=$S3_BUCKET")
     fi
     if [ -n "$S3_REGION" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.region=$S3_REGION")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.region=$S3_REGION")
     fi
     if [ -n "$S3_ENDPOINT" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.s3.endpoint=$S3_ENDPOINT")
     fi
     if [ -n "$GCS_BUCKET" ]; then
-        OPTIONAL_OVERRIDES+=(--set "clickhouse.backup.gcs.bucket=$GCS_BUCKET")
+        OPTIONAL_OVERRIDES+=(--set "dataPlane.components.clickhouse.backup.gcs.bucket=$GCS_BUCKET")
     fi
     
     # Add image overrides if specified (for development/testing)
@@ -367,20 +382,21 @@ install_data_plane() {
         OPTIONAL_OVERRIDES+=(--set "dataPlane.components.worker.image.tag=$WORKER_IMAGE_TAG")
     fi
 
-    helm upgrade --install data-plane ./helm-charts/openshift/data-plane \
+    helm upgrade --install data-plane ./helm-charts/neuraltrust/data-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
-        --set dataPlane.components.api.huggingfaceToken="$HUGGINGFACE_TOKEN" \
+        --set dataPlane.secrets.huggingFaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
         --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
         --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
         --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-        --set clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
-        --set clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
-        --set clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
-        --set clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
+        --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
+        --set dataPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         "${OPTIONAL_OVERRIDES[@]}" \
         --wait
 
@@ -390,7 +406,7 @@ install_data_plane() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    validate_command "oc"
+    validate_command "kubectl"
     validate_command "helm"
     validate_command "openssl"
     # validate_command "yq" # yq is no longer a prerequisite
@@ -398,9 +414,8 @@ check_prerequisites() {
     # Check if jq is installed, as it's used for GCR key validation and potentially other tasks
     validate_command "jq"
 
-
     # Check if cluster is accessible
-    if ! oc get pods &> /dev/null; then
+    if ! kubectl get pods &> /dev/null; then
         log_error "Cannot access Kubernetes cluster"
         exit 1
     fi

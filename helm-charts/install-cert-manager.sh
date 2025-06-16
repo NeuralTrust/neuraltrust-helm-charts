@@ -98,7 +98,7 @@ check_cert_manager_installed() {
 
 if ! check_cert_manager_installed; then
     log_info "Installing cert-manager..."
-    helm upgrade --install cert-manager jetstack/cert-manager \
+    helm upgrade --install cert-manager ./cert-manager \
         --namespace "$NAMESPACE" \
         --set installCRDs=true \
         --wait

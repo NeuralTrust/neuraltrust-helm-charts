@@ -10,7 +10,7 @@ source scripts/common.sh
 # Initialize variables
 NAMESPACE=""
 DEFAULT_NAMESPACE="neuraltrust"
-VALUES_FILE="helm-charts/k8s/values.yaml"
+VALUES_FILE="helm-charts/values-neuraltrust.yaml"
 
 # Parse command line arguments
 INSTALL_POSTGRESQL=false
@@ -314,7 +314,7 @@ install_control_plane() {
         OPTIONAL_OVERRIDES+=(--set "controlPlane.components.scheduler.image.tag=$CONTROL_PLANE_SCHEDULER_IMAGE_TAG")
     fi
     
-    helm upgrade --install $RELEASE_NAME ./helm-charts/k8s/control-plane \
+    helm upgrade --install $RELEASE_NAME ./helm-charts/neuraltrust/control-plane \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
@@ -370,7 +370,7 @@ install_control_plane() {
             log_info "Updating app deployment with the fetched API host: $ACTUAL_API_HOST"
             # --reuse-values ensures all other configurations from the initial install are preserved.
             # We only override the specific value for the app's API URL.
-            helm upgrade $RELEASE_NAME ./helm-charts/k8s/control-plane \
+            helm upgrade $RELEASE_NAME ./helm-charts/neuraltrust/control-plane \
                 --namespace "$NAMESPACE" \
                 --reuse-values \
                 --set controlPlane.components.app.config.controlPlaneApiUrl="$ACTUAL_API_HOST" \
@@ -429,7 +429,7 @@ install_control_plane() {
             log_info "Updating app deployment with the fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
             # --reuse-values ensures all other configurations from the initial install are preserved.
             # We only override the specific value for the app's scheduler URL.
-            helm upgrade $RELEASE_NAME ./helm-charts/k8s/control-plane \
+            helm upgrade $RELEASE_NAME ./helm-charts/neuraltrust/control-plane \
                 --namespace "$NAMESPACE" \
                 --reuse-values \
                 --set controlPlane.components.scheduler.host="$ACTUAL_SCHEDULER_HOST" \

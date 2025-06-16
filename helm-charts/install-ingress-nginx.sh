@@ -51,7 +51,7 @@ if ! kubectl get namespace $NAMESPACE &> /dev/null; then
 fi
 
 # Install ingress-nginx using the local chart
-helm upgrade --install ingress-nginx ./shared-charts/ingress-nginx \
+helm upgrade --install ingress-nginx ./ingress-nginx \
     --namespace $NAMESPACE \
     --set controller.service.type=LoadBalancer \
     --wait --timeout=10m
