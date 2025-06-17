@@ -5,7 +5,7 @@ metadata:
   labels:
     app: {{ .Release.Name }}-api
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 8000

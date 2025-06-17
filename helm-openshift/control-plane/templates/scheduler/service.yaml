@@ -5,7 +5,7 @@ metadata:
   labels:
     app: {{ .Release.Name }}-scheduler
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - port: 80
       targetPort: 3000
