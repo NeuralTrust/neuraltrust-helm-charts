@@ -35,7 +35,9 @@ spec:
   tls:
     - hosts:
         - {{ .Values.controlPlane.components.app.host | quote }}
+        {{ if .Values.controlPlane.components.app.secondaryHost }}
         - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
+        {{ end }}
       secretName: "{{ .Release.Name }}-app-tls"
   rules:
     - host: {{ .Values.controlPlane.components.app.host | quote }}
@@ -49,6 +51,7 @@ spec:
                 port:
                   number: 80
 ---
+{{ if .Values.controlPlane.components.app.secondaryHost }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -74,3 +77,4 @@ spec:
                 name: {{ .Release.Name }}-app-service
                 port:
                   number: 80
+{{ end }}

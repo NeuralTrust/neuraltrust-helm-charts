@@ -196,10 +196,17 @@ create_data_plane_secrets() {
     log_info "Creating data plane secrets..."
     
     # Create JWT secret
-    kubectl create secret generic data-plane-jwt-secret \
-        --namespace "$NAMESPACE" \
-        --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
-        --dry-run=client -o yaml | kubectl apply -f -
+    # Generate DATA_PLANE_JWT_SECRET if not provided
+    if [ -z "$DATA_PLANE_JWT_SECRET" ]; then
+        log_info "DATA_PLANE_JWT_SECRET not provided, generating a new one..."
+        DATA_PLANE_JWT_SECRET=$(openssl rand -base64 32)
+        log_info "Generated DATA_PLANE_JWT_SECRET. $DATA_PLANE_JWT_SECRET"
+
+        kubectl create secret generic data-plane-jwt-secret \
+            --namespace "$NAMESPACE" \
+            --from-literal=DATA_PLANE_JWT_SECRET="$DATA_PLANE_JWT_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
 
     # Create OpenAI API key secret if provided
     if [ -n "$OPENAI_API_KEY" ]; then
