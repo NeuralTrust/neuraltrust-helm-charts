@@ -231,7 +231,7 @@ install_control_plane() {
         log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
         log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
         log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-api-service 8080:80"
-        log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-app-service 3000:80"
+        log_warn "  kubectl port-forward -n $NAMESPACE service/control-plane-app-service 8000:80"
         log_warn "  kubectl port-forward -n $NAMESPACE svc/control-plane-scheduler-service 8081:80"
     fi
 

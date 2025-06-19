@@ -120,6 +120,8 @@ spec:
           value: "{{ .Values.controlPlane.components.app.config.nodeEnv }}"
         - name: PORT
           value: "{{ .Values.controlPlane.components.app.config.port }}"
+        - name: HOSTNAME
+          value: "0.0.0.0"
         - name: NT_API_URL
           value: "http://neuraltrust-api-service.neuraltrust.svc.cluster.local"
         - name: POSTGRES_HOST
