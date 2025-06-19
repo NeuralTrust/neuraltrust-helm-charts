@@ -59,9 +59,12 @@ dataPlane:
       enabled: true
       connect:
         replicas: 1
-        image: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/kafka-connect:latest
-        imagePullSecrets:
-          - name: ""
+        image:
+          repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect
+          tag: v0.0.1
+          pullPolicy: Always
+          imagePullSecrets:
+            - name: ""
         resources:
           limits:
             cpu: "1"
@@ -119,8 +122,8 @@ dataPlane:
       classifierModel: "gpt"
       replicaCount: 2  # Standardized naming
       image:
-        repository: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/data-plane-api
-        tag: latest
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
+        tag: v1.3.0
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
@@ -146,17 +149,17 @@ dataPlane:
           temperature: 0.2
       resources:
         requests:
-          cpu: 200m
-          memory: 512Mi
-        limits:
           cpu: 400m
-          memory: 1Gi
+          memory: 2Gi
+        limits:
+          cpu: 800m
+          memory: 6Gi
     worker:
       enabled: true
       replicas: 1
       image:
-        repository: europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/workers
-        tag: latest
+        repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers
+        tag: v1.3.0
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
@@ -210,15 +213,13 @@ controlPlane:
           secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 1  # Standardized naming
       image:
-        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/scheduler"
-        tag: "latest"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler"
+        tag: "v1.2.6"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
-      env:
+      config:
         dataPlaneApiUrl: ""  # Define this value
-        dataPlaneApiVersion: v1
-        dataPlaneJwtSecret: ""  # Define this value
       resources:
         requests:
           memory: 256Mi
@@ -256,13 +257,15 @@ controlPlane:
           secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 2  # Standardized naming
       image:
-        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/control-plane-api"
-        tag: "latest"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
+        tag: "v1.3.0"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
       secrets:
         controlPlaneJWTSecret: ""  # Define this value
+      config:
+        dataPlaneApiUrl: ""  # Define this value
       resources:
         requests:
           memory: 512Mi
@@ -301,15 +304,14 @@ controlPlane:
           secretName: ""  # Leave empty to auto-generate per-service secrets
       replicaCount: 1
       image:
-        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-dev/nt-docker/app"
-        tag: "latest"
+        repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
+        tag: "v1.3.0"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
       config:
         nodeEnv: production
         port: 3000
-        controlPlaneApiUrl: ""
         dataPlaneApiUrl: ""  # Define this value
         openaiModel: "gpt-4o-mini"
       resources:
@@ -334,7 +336,7 @@ controlPlane:
         user: "postgres"
         password: ""  # Define this value
         database: "develop"
-        host: "34.78.67.23"
+        host: "" # Define this value
         port: "5432"
       image: # only used if installInCluster is true
         repository: "postgres"

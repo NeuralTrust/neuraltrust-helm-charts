@@ -57,14 +57,18 @@ spec:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
         - name: DATA_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.scheduler.env.dataPlaneApiUrl }}"
+          value: "http://{{ .Values.controlPlane.components.scheduler.config.dataPlaneApiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
         - name: CONTROL_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.scheduler.env.controlPlaneApiUrl }}"
+          {{- if .Values.controlPlane.components.scheduler.config.controlPlaneApiUrl }}
+          value: "{{ .Values.controlPlane.components.scheduler.config.controlPlaneApiUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-api-service.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:

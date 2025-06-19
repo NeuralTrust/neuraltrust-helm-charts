@@ -59,45 +59,47 @@ done
 
 # Set up additional Helm values based on parameters
 
-verify_environment() {
-    local env="${1:-$ENVIRONMENT}"
-    if [ -z "$env" ]; then
-        log_error "No environment specified. Please set ENVIRONMENT variable (dev/prod)"
+if [ -z "$ENVIRONMENT" ]; then
+    log_info "No environment specified. Please choose an environment."
+    read -p "Enter environment (dev/prod): " ENVIRONMENT
+    
+    if [ -z "$ENVIRONMENT" ]; then
+        log_error "Environment cannot be empty"
         exit 1
     fi
+fi
 
-    case "$env" in
-        dev|prod)
-            ;;
-        *)
-            log_error "Invalid environment: $env. Must be 'dev' or 'prod'"
-            exit 1
-            ;;
-    esac
+case "$ENVIRONMENT" in
+    dev|prod)
+        ;;
+    *)
+        log_error "Invalid environment: $ENVIRONMENT. Must be 'dev' or 'prod'"
+        exit 1
+        ;;
+esac
 
-    # Ask for confirmation
-    log_warn "You are about to install NeuralTrust Control Plane in ${env} environment"
-    
-    read -p "Are you sure you want to continue? (yes/no) " -r
+# Ask for confirmation
+log_warn "You are about to install NeuralTrust Data Plane in ${ENVIRONMENT} environment"
+
+read -p "Are you sure you want to continue? (yes/no) " -r
+echo
+if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+    log_error "Installation aborted"
+    exit 1
+fi
+
+# Second confirmation for production
+if [ "$ENVIRONMENT" = "prod" ]; then
+    log_warn "⚠️  WARNING: You are about to modify PRODUCTION environment!"
+    read -p "Please type 'PRODUCTION' to confirm: " -r
     echo
-    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+    if [ "$REPLY" != "PRODUCTION" ]; then
         log_error "Installation aborted"
         exit 1
     fi
+fi
 
-    # Second confirmation for production
-    if [ "$env" = "prod" ]; then
-        log_warn "⚠️  WARNING: You are about to modify PRODUCTION environment!"
-        read -p "Please type 'PRODUCTION' to confirm: " -r
-        echo
-        if [ "$REPLY" != "PRODUCTION" ]; then
-            log_error "Installation aborted"
-            exit 1
-        fi
-    fi
-}
-
-ENV_FILE=".env.control-plane.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.control-plane.${ENVIRONMENT}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
@@ -246,6 +248,8 @@ install_control_plane() {
     
     if [ "$INSTALL_POSTGRESQL" = true ]; then
         POSTGRES_HOST_FINAL="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
+    elif [ -n "$POSTGRES_HOST" ]; then
+        POSTGRES_HOST_FINAL="$POSTGRES_HOST"
     fi
     
     # Build optional configuration overrides for non-sensitive data
@@ -278,7 +282,8 @@ install_control_plane() {
         --set controlPlane.components.postgresql.installInCluster="$INSTALL_POSTGRESQL" \
         --set controlPlane.components.postgresql.secrets.password="$POSTGRES_PASSWORD" \
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.components.scheduler.env.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
+        --set controlPlane.components.scheduler.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
+        --set controlPlane.components.api.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
         --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
@@ -286,124 +291,6 @@ install_control_plane() {
         "${OPTIONAL_OVERRIDES[@]}" \
         --wait
 
-    # If CONTROL_PLANE_API_URL was initially empty (meaning Kubernetes generates the API host via ingress),
-    # we need to fetch this generated host and update the app's configuration.
-    # The $CONTROL_PLANE_API_URL variable holds its value from the sourced .env file.
-    if [ -z "$CONTROL_PLANE_API_URL" ]; then
-        log_info "CONTROL_PLANE_API_URL was empty. Attempting to fetch the generated API ingress host..."
-        # Assuming the API ingress is named based on the release name and a suffix '-api'
-        API_INGRESS_NAME="$RELEASE_NAME-api-ingress"
-        
-        ACTUAL_API_HOST=""
-        RETRY_COUNT=0
-        MAX_RETRIES=12  # Total wait time: MAX_RETRIES * RETRY_DELAY (e.g., 12 * 10s = 120s)
-        RETRY_DELAY=10 # Seconds
-
-        log_info "Waiting for API ingress '$API_INGRESS_NAME' in namespace '$NAMESPACE' to be assigned a host..."
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Fetch the host. Use 2>/dev/null to suppress errors if ingress not found yet.
-            RAW_KUBECTL_GET_INGRESS=$(kubectl get ingress "$API_INGRESS_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
-            
-            # Check if kubectl command was successful and output is not empty
-            if [ $? -eq 0 ] && [ -n "$RAW_KUBECTL_GET_INGRESS" ]; then
-                ACTUAL_API_HOST=$RAW_KUBECTL_GET_INGRESS
-                log_info "Fetched API host: $ACTUAL_API_HOST"
-                break
-            else
-                log_info "API ingress host not yet available or ingress not found. Retrying in $RETRY_DELAY seconds... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
-                sleep $RETRY_DELAY
-                RETRY_COUNT=$((RETRY_COUNT+1))
-            fi
-        done
-
-        if [ -n "$ACTUAL_API_HOST" ]; then
-            log_info "Updating app deployment with the fetched API host: $ACTUAL_API_HOST"
-
-            helm upgrade $RELEASE_NAME "./neuraltrust/control-plane" \
-                --namespace "$NAMESPACE" \
-                --reuse-values \
-                --set controlPlane.components.app.config.controlPlaneApiUrl="$ACTUAL_API_HOST" \
-                --set controlPlane.components.scheduler.env.controlPlaneApiUrl="$ACTUAL_API_HOST" \
-                --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --timeout 5m \
-                --wait
-            
-            if [ $? -eq 0 ]; then
-                log_info "App deployment successfully updated to use API host: $ACTUAL_API_HOST"
-            else
-                log_error "Failed to update app deployment with the new API host '$ACTUAL_API_HOST'. Check Helm status for release '$RELEASE_NAME'."
-            fi
-        else
-            log_error "Failed to fetch API ingress host after $MAX_RETRIES attempts for ingress '$API_INGRESS_NAME'."
-            log_warn "The app's CONTROL_PLANE_API_URL (controlPlane.components.app.config.controlPlaneApiUrl) might be incorrect."
-            log_warn "It was initially configured with an empty value, resulting in 'https://' and was not updated."
-            log_warn "Manual intervention might be required to set it to the correct API host."
-        fi
-    else
-        log_info "CONTROL_PLANE_API_URL was set to '$CONTROL_PLANE_API_URL'. The app deployment will use this value directly."
-        log_info "No dynamic update needed for controlPlane.components.app.config.controlPlaneApiUrl based on a generated ingress host."
-    fi
-
-    # If CONTROL_PLANE_SCHEDULER_URL was initially empty (meaning Kubernetes generates the scheduler host via ingress),
-    # we need to fetch this generated host and update the app's configuration.
-    # The $CONTROL_PLANE_SCHEDULER_URL variable holds its value from the sourced .env file.
-    if [ -z "$CONTROL_PLANE_SCHEDULER_URL" ]; then
-        log_info "CONTROL_PLANE_SCHEDULER_URL was empty. Attempting to fetch the generated scheduler ingress host..."
-        # Assuming the scheduler ingress is named based on the release name and a suffix '-scheduler-ingress'
-        SCHEDULER_INGRESS_NAME="$RELEASE_NAME-scheduler-ingress"
-        
-        ACTUAL_SCHEDULER_HOST=""
-        RETRY_COUNT=0
-        MAX_RETRIES=12  # Total wait time: MAX_RETRIES * RETRY_DELAY (e.g., 12 * 10s = 120s)
-        RETRY_DELAY=10 # Seconds
-
-        log_info "Waiting for scheduler ingress '$SCHEDULER_INGRESS_NAME' in namespace '$NAMESPACE' to be assigned a host..."
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Fetch the host. Use 2>/dev/null to suppress errors if ingress not found yet.
-            RAW_KUBECTL_GET_INGRESS=$(kubectl get ingress "$SCHEDULER_INGRESS_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
-            
-            # Check if kubectl command was successful and output is not empty
-            if [ $? -eq 0 ] && [ -n "$RAW_KUBECTL_GET_INGRESS" ]; then
-                ACTUAL_SCHEDULER_HOST=$RAW_KUBECTL_GET_INGRESS
-                log_info "Fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
-                break
-            else
-                log_info "Scheduler ingress host not yet available or ingress not found. Retrying in $RETRY_DELAY seconds... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
-                sleep $RETRY_DELAY
-                RETRY_COUNT=$((RETRY_COUNT+1))
-            fi
-        done
-
-        if [ -n "$ACTUAL_SCHEDULER_HOST" ]; then
-            log_info "Updating app deployment with the fetched scheduler host: $ACTUAL_SCHEDULER_HOST"
-
-            helm upgrade $RELEASE_NAME "./neuraltrust/control-plane" \
-                --namespace "$NAMESPACE" \
-                --reuse-values \
-                --set controlPlane.components.scheduler.host="$ACTUAL_SCHEDULER_HOST" \
-                --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-                --timeout 5m \
-                --wait
-            
-            if [ $? -eq 0 ]; then
-                log_info "App deployment successfully updated to use scheduler host: $ACTUAL_SCHEDULER_HOST"
-            else
-                log_error "Failed to update app deployment with the new scheduler host '$ACTUAL_SCHEDULER_HOST'. Check Helm status for release '$RELEASE_NAME'."
-            fi
-        else
-            log_error "Failed to fetch scheduler ingress host after $MAX_RETRIES attempts for ingress '$SCHEDULER_INGRESS_NAME'."
-            log_warn "The app's CONTROL_PLANE_SCHEDULER_URL (controlPlane.components.scheduler.host) might be incorrect."
-            log_warn "It was initially configured with an empty value, resulting in 'https://' and was not updated."
-            log_warn "Manual intervention might be required to set it to the correct scheduler host."
-        fi
-    else
-        log_info "CONTROL_PLANE_SCHEDULER_URL was set to '$CONTROL_PLANE_SCHEDULER_URL'. The app deployment will use this value directly."
-        log_info "No dynamic update needed for controlPlane.components.scheduler.host based on a generated ingress host."
-    fi
 
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"
 }
@@ -423,7 +310,6 @@ check_prerequisites() {
 }
 
 main() {
-    verify_environment "$ENVIRONMENT"
     prompt_for_namespace
     prompt_for_data_plane_api_url
     prompt_for_control_plane_jwt_secret

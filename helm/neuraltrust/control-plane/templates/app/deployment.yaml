@@ -97,7 +97,7 @@ spec:
               name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.apiUrl }}"
+          value: "http://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -121,7 +121,7 @@ spec:
         - name: PORT
           value: "{{ .Values.controlPlane.components.app.config.port }}"
         - name: NT_API_URL
-          value: "http://neuraltrust-api-service.neuraltrust.svc.cluster.local:80"
+          value: "http://neuraltrust-api-service.neuraltrust.svc.cluster.local"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
@@ -177,20 +177,28 @@ spec:
         - name: OPENAI_MODEL
           value: "{{ .Values.controlPlane.components.app.config.openaiModel }}"
         - name: CONTROL_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.controlPlaneApiUrl }}"
+          {{- if .Values.controlPlane.components.app.config.controlPlaneApiUrl }}
+          value: "{{ .Values.controlPlane.components.app.config.controlPlaneApiUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-api-service.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
-          value: "https://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          value: "http://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
               name: data-plane-jwt-secret
               key: DATA_PLANE_JWT_SECRET
         - name: CONTROL_PLANE_SCHEDULER_URL
-          value: "https://{{ .Values.controlPlane.components.scheduler.host }}"
+          {{- if .Values.controlPlane.components.app.config.schedulerUrl }}
+          value: "{{ .Values.controlPlane.components.app.config.schedulerUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-scheduler.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
         resources:
           {{- toYaml .Values.controlPlane.components.app.resources | nindent 10 }}

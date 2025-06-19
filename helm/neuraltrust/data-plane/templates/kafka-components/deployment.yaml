@@ -12,11 +12,14 @@ spec:
       labels:
         app: kafka-connect
     spec:
+      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
       imagePullSecrets:
-        {{- toYaml .Values.dataPlane.components.kafka.imagePullSecrets | nindent 10 }}
+        - name: gcr-secret
+      {{- end }}
       containers:
         - name: kafka-connect
-          image: {{ .Values.dataPlane.components.kafka.connect.image | quote }}
+          image: "{{.Values.dataPlane.components.kafka.connect.image.repository}}:{{ .Values.dataPlane.components.kafka.connect.image.tag }}"
+          imagePullPolicy: {{ .Values.dataPlane.components.kafka.connect.image.pullPolicy }}
           ports:
             - containerPort: 8083
           readinessProbe:

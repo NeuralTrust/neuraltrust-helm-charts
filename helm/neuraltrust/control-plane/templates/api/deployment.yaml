@@ -30,7 +30,7 @@ spec:
         - containerPort: 8000
         env:
         - name: DEFAULT_DATA_PLANE_URL
-          value: data-plane-api-service.{{ .Release.Namespace }}.svc.cluster.local
+          value: "{{ .Values.controlPlane.components.api.config.dataPlaneApiUrl }}"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:

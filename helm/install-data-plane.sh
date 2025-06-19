@@ -51,45 +51,48 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-verify_environment() {
-    local env="${1:-$ENVIRONMENT}"
-    if [ -z "$env" ]; then
-        log_error "No environment specified. Please set ENVIRONMENT variable (dev/prod)"
+
+if [ -z "$ENVIRONMENT" ]; then
+    log_info "No environment specified. Please choose an environment."
+    read -p "Enter environment (dev/prod): " ENVIRONMENT
+    
+    if [ -z "$ENVIRONMENT" ]; then
+        log_error "Environment cannot be empty"
         exit 1
     fi
+fi
 
-    case "$env" in
-        dev|prod)
-            ;;
-        *)
-            log_error "Invalid environment: $env. Must be 'dev' or 'prod'"
-            exit 1
-            ;;
-    esac
+case "$ENVIRONMENT" in
+    dev|prod)
+        ;;
+    *)
+        log_error "Invalid environment: $ENVIRONMENT. Must be 'dev' or 'prod'"
+        exit 1
+        ;;
+esac
 
-    # Ask for confirmation
-    log_warn "You are about to install NeuralTrust Data Plane in ${env} environment"
-    
-    read -p "Are you sure you want to continue? (yes/no) " -r
+# Ask for confirmation
+log_warn "You are about to install NeuralTrust Data Plane in ${ENVIRONMENT} environment"
+
+read -p "Are you sure you want to continue? (yes/no) " -r
+echo
+if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+    log_error "Installation aborted"
+    exit 1
+fi
+
+# Second confirmation for production
+if [ "$ENVIRONMENT" = "prod" ]; then
+    log_warn "⚠️  WARNING: You are about to modify PRODUCTION environment!"
+    read -p "Please type 'PRODUCTION' to confirm: " -r
     echo
-    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+    if [ "$REPLY" != "PRODUCTION" ]; then
         log_error "Installation aborted"
         exit 1
     fi
+fi
 
-    # Second confirmation for production
-    if [ "$env" = "prod" ]; then
-        log_warn "⚠️  WARNING: You are about to modify PRODUCTION environment!"
-        read -p "Please type 'PRODUCTION' to confirm: " -r
-        echo
-        if [ "$REPLY" != "PRODUCTION" ]; then
-            log_error "Installation aborted"
-            exit 1
-        fi
-    fi
-}
-
-ENV_FILE=".env.data-plane.${ENVIRONMENT:-prod}"
+ENV_FILE=".env.data-plane.${ENVIRONMENT}"
 
 # Load environment variables
 if [ -f "$ENV_FILE" ]; then
@@ -358,7 +361,6 @@ check_prerequisites() {
 }
 
 main() {
-    verify_environment "$ENVIRONMENT"
     prompt_for_namespace
     check_prerequisites
     install_data_plane
