@@ -305,7 +305,7 @@ controlPlane:
       replicaCount: 1
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
-        tag: "v1.3.0"
+        tag: "v1.3.1"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
