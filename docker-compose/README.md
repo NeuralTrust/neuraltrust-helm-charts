@@ -1,4 +1,7 @@
-# NeuralTrust Full Stack - Docker Compose
+# NeuralTrust - Docker Compose
+
+> [!NOTE]  
+> This deployment is recommended for local development and testing. For production deployments, we recommend using Kubernetes/OpenShift.
 
 Complete Docker Compose deployment of the NeuralTrust platform with both Control Plane and Data Plane components.
 
