@@ -1,0 +1,21 @@
+{
+    "evaluator": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "temperature": 0.2
+    },
+    "question_generator": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "temperature": 0.5
+    },
+    "embeddings": {
+        "provider": "openai",
+        "model": "text-embedding-3-small"
+    },
+    "topic_summarizer": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "temperature": 0.2
+    }
+} 
