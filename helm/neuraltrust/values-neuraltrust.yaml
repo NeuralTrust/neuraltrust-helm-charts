@@ -1,3 +1,6 @@
+global:
+  openshift: false # set to true if you are using openshift
+
 dataPlane:
   enabled: true
   secrets:
@@ -94,11 +97,11 @@ dataPlane:
             memory: 256Mi
     api:
       enabled: true
+      host: "data-plane-api.neuraltrust.ai" # set to your domain
       service:
         type: LoadBalancer
       ingress:
         enabled: true
-        host: "data-plane-api.neuraltrust.ai" # set to your domain
         className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
         annotations:
           cert-manager.io/cluster-issuer: "letsencrypt-issuer"
@@ -185,10 +188,10 @@ controlPlane:
   components:
     scheduler:
       enabled: true
+      host: "control-plane-scheduler.neuraltrust.ai" # set to your domain
       service:
         type: LoadBalancer
       ingress:
-        host: "control-plane-scheduler.neuraltrust.ai" # set to your domain
         enabled: true
         className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
         annotations:
@@ -229,10 +232,10 @@ controlPlane:
           cpu: 200m
     api:
       enabled: true
+      host: "control-plane-api.neuraltrust.ai" # set to your domain
       service:
         type: LoadBalancer
       ingress:
-        host: "control-plane-api.neuraltrust.ai" # set to your domain
         enabled: true
         className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
         annotations:
@@ -275,11 +278,11 @@ controlPlane:
           cpu: 500m
     app:
       enabled: true
+      host: "control-plane-app.neuraltrust.ai" # set to your domain
+      secondaryHost: ""
       service:
         type: LoadBalancer
       ingress:
-        host: "control-plane-app.neuraltrust.ai" # set to your domain
-        secondaryHost: ""
         enabled: true
         className: "nginx"  # Set to your ingress controller class (e.g., "nginx", "traefik", "haproxy")
         annotations:

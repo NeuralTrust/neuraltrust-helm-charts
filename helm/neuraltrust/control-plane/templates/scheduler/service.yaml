@@ -12,7 +12,7 @@ spec:
       name: http
   selector:
     app: {{ .Release.Name }}-scheduler
-{{- if .Values.controlPlane.components.scheduler.ingress.enabled }}
+{{- if and (not .Values.global.openshift) .Values.controlPlane.components.scheduler.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,7 +29,7 @@ spec:
   {{- if .Values.controlPlane.components.scheduler.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.controlPlane.components.scheduler.ingress.host | quote }}
+        - {{ .Values.controlPlane.components.scheduler.host | quote }}
       {{- if .Values.controlPlane.components.scheduler.ingress.tls.secretName }}
       secretName: {{ .Values.controlPlane.components.scheduler.ingress.tls.secretName }}
       {{- else }}
@@ -37,7 +37,7 @@ spec:
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.controlPlane.components.scheduler.ingress.host | quote }}
+    - host: {{ .Values.controlPlane.components.scheduler.host | quote }}
       http:
         paths:
           - path: /
@@ -47,4 +47,22 @@ spec:
                 name: "{{ .Release.Name }}-scheduler-service"
                 port:
                   name: http
+{{- end }}
+{{- if .Values.global.openshift }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ .Release.Name }}-scheduler-route"
+spec:
+  host: {{ .Values.controlPlane.components.scheduler.host | quote }}
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: "{{ .Release.Name }}-scheduler-service"
+    weight: 100
+  port:
+    targetPort: http
+  path: "/"
 {{- end }}

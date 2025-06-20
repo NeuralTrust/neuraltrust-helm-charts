@@ -12,7 +12,7 @@ spec:
       name: http
   selector:
     app: api
-{{- if .Values.dataPlane.components.api.ingress.enabled }}
+{{- if and (not .Values.global.openshift) .Values.dataPlane.components.api.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,7 +29,7 @@ spec:
   {{- if .Values.dataPlane.components.api.ingress.tls.enabled }}
   tls:
     - hosts:
-        - "{{ .Values.dataPlane.components.api.ingress.host }}"
+        - "{{ .Values.dataPlane.components.api.host }}"
       {{- if .Values.dataPlane.components.api.ingress.tls.secretName }}
       secretName: {{ .Values.dataPlane.components.api.ingress.tls.secretName }}
       {{- else }}
@@ -37,7 +37,7 @@ spec:
       {{- end }}
   {{- end }}
   rules:
-    - host: "{{ .Values.dataPlane.components.api.ingress.host }}"
+    - host: "{{ .Values.dataPlane.components.api.host }}"
       http:
         paths:
           - path: /
@@ -47,4 +47,22 @@ spec:
                 name: "{{ .Release.Name }}-api-service"
                 port:
                   name: http
+{{- end }}
+{{- if .Values.global.openshift }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ .Release.Name }}-api-route"
+spec:
+  host: "{{ .Values.dataPlane.components.api.host }}"
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: "{{ .Release.Name }}-api-service"
+    weight: 100
+  port:
+    targetPort: http
+  path: "/"
 {{- end }}

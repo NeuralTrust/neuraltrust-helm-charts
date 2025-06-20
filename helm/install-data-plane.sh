@@ -16,6 +16,7 @@ VALUES_FILE="./neuraltrust/values-neuraltrust.yaml"
 RELEASE_NAME="data-plane"
 AVOID_NEURALTRUST_PRIVATE_REGISTRY=false # if false, uses NeuralTrust private registry (GCP)
 SKIP_INGRESS=false # if true, skips ingress-nginx installation
+USE_OPENSHIFT=false # if true, uses oc instead of kubectl
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -38,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_INGRESS=true
       shift
       ;;
+    --openshift)
+      USE_OPENSHIFT=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
       echo "Usage: $0 [options]"
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --release-name <name>                        Set the release name (default: data-plane)"
       echo "  --avoid-neuraltrust-private-registry         Use public images instead of NeuralTrust private registry"
       echo "  --skip-ingress                               Skip ingress-nginx controller installation"
+      echo "  --openshift                                  Use oc commands instead of kubectl for OpenShift"
       exit 1
       ;;
   esac
@@ -104,6 +110,13 @@ else
     exit 1
 fi
 
+# Set kubectl command based on platform
+if [ "$USE_OPENSHIFT" = true ]; then
+    KUBECTL_CMD="oc"
+else
+    KUBECTL_CMD="kubectl"
+fi
+
 # Function to prompt for namespace
 prompt_for_namespace() {
     if [ -z "$NAMESPACE" ]; then
@@ -115,13 +128,13 @@ prompt_for_namespace() {
 
 # Function to create namespace if it doesn't exist
 create_namespace_if_not_exists() {
-    if ! kubectl get namespace "$NAMESPACE" &> /dev/null; then
+    if ! $KUBECTL_CMD get namespace "$NAMESPACE" &> /dev/null; then
         log_info "Namespace $NAMESPACE does not exist. Creating..."
-        kubectl create namespace "$NAMESPACE"
+        $KUBECTL_CMD create namespace "$NAMESPACE"
         log_info "Namespace $NAMESPACE created successfully"
     else
         log_info "Namespace $NAMESPACE runningrun."
-        kubectl config set-context --current --namespace="$NAMESPACE"
+        $KUBECTL_CMD config set-context --current --namespace="$NAMESPACE"
     fi
 }
 
@@ -241,12 +254,12 @@ create_data_plane_secrets() {
         fi
         
         # Create the secret
-        kubectl create -n "$NAMESPACE" secret docker-registry gcr-secret \
+        $KUBECTL_CMD create -n "$NAMESPACE" secret docker-registry gcr-secret \
             --docker-server=europe-west1-docker.pkg.dev \
             --docker-username=_json_key \
             --docker-password="$GCR_KEY" \
             --docker-email=admin@neuraltrust.ai \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | $KUBECTL_CMD apply -f -
         
         log_info "GCR secret created successfully"
     else
@@ -296,7 +309,7 @@ install_data_plane() {
         log_info "Skipping ingress-nginx installation as requested"
         log_warn "Note: When skipping ingress, services will only be accessible via ClusterIP or manual port-forwarding"
         log_warn "To access services externally, you'll need to set up your own ingress controller or use port-forwarding:"
-        log_warn "  kubectl port-forward -n $NAMESPACE svc/data-plane-api-service 8000:80"
+        log_warn "  $KUBECTL_CMD port-forward -n $NAMESPACE svc/data-plane-api-service 8000:80"
     fi
     
     # Prompt for API keys and validate
@@ -345,7 +358,7 @@ install_data_plane() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
-    validate_command "kubectl"
+    validate_command "$KUBECTL_CMD"
     validate_command "helm"
     validate_command "openssl"
     # validate_command "yq" # yq is no longer a prerequisite
@@ -354,7 +367,7 @@ check_prerequisites() {
     validate_command "jq"
 
     # Check if cluster is accessible
-    if ! kubectl get pods &> /dev/null; then
+    if ! $KUBECTL_CMD get pods &> /dev/null; then
         log_error "Cannot access Kubernetes cluster"
         exit 1
     fi

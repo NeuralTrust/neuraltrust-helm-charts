@@ -10,7 +10,7 @@ spec:
     - port: 80
       targetPort: {{ .Values.controlPlane.components.app.config.port }}
       name: http
-{{- if .Values.controlPlane.components.app.ingress.enabled }}
+{{- if and (not .Values.global.openshift) .Values.controlPlane.components.app.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -27,9 +27,9 @@ spec:
   {{- if .Values.controlPlane.components.app.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.controlPlane.components.app.ingress.host | quote }}
-        {{- if .Values.controlPlane.components.app.ingress.secondaryHost }}
-        - {{ .Values.controlPlane.components.app.ingress.secondaryHost | quote }}
+        - {{ .Values.controlPlane.components.app.host | quote }}
+        {{- if .Values.controlPlane.components.app.secondaryHost }}
+        - {{ .Values.controlPlane.components.app.secondaryHost | quote }}
         {{- end }}
       {{- if .Values.controlPlane.components.app.ingress.tls.secretName }}
       secretName: {{ .Values.controlPlane.components.app.ingress.tls.secretName }}
@@ -38,7 +38,7 @@ spec:
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.controlPlane.components.app.ingress.host | quote }}
+    - host: {{ .Values.controlPlane.components.app.host | quote }}
       http:
         paths:
           - path: /
@@ -48,8 +48,8 @@ spec:
                 name: "{{ .Release.Name }}-app-service"
                 port:
                   name: http
-    {{- if .Values.controlPlane.components.app.ingress.secondaryHost }}
-    - host: {{ .Values.controlPlane.components.app.ingress.secondaryHost | quote }}
+    {{- if .Values.controlPlane.components.app.secondaryHost }}
+    - host: {{ .Values.controlPlane.components.app.secondaryHost | quote }}
       http:
         paths:
           - path: /
@@ -60,4 +60,40 @@ spec:
                 port:
                   name: http
     {{- end }}
+{{- end }}
+{{- if .Values.global.openshift }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ .Release.Name }}-app-route"
+spec:
+  host: {{ .Values.controlPlane.components.app.host | quote }}
+  to:
+    kind: Service
+    name: "{{ .Release.Name }}-app-service"
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ .Release.Name }}-app-redirect-route"
+  annotations:
+    haproxy.router.openshift.io/route-redirect: https://{{ .Values.controlPlane.components.app.host }}
+spec:
+  host: {{ .Values.controlPlane.components.app.secondaryHost | quote }}
+  to:
+    kind: Service
+    name: "{{ .Release.Name }}-app-service"
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
 {{- end }}
