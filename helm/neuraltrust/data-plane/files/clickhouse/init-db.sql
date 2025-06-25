@@ -786,7 +786,7 @@ GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), CHANNEL_ID;
 
 -- First, create a materialized view to collect user engagement data
 CREATE MATERIALIZED VIEW IF NOT EXISTS traces_user_engagement_data
-ENGINE = AggregatingMergeTree()
+ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(EVENT_DATE)
 ORDER BY (EVENT_DATE, APP_ID, day, USER_ID)
 AS SELECT
@@ -797,7 +797,7 @@ AS SELECT
     -- Count interactions per user
     count() as interaction_count
 FROM traces_processed
-WHERE USER_ID != ''
+WHERE TASK = 'message' AND USER_ID != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
 -- Then create a regular view on top of the materialized view
@@ -805,13 +805,13 @@ CREATE OR REPLACE VIEW traces_engagement_metrics AS
     SELECT
         APP_ID,
         EVENT_DATE,
-    day,
-    -- User metrics
-    uniqExact(USER_ID) as active_users,
-    -- Average calls per user
-    sum(interaction_count) / uniqExact(USER_ID) as avg_calls_per_user,
-    -- Maximum calls per user
-    max(interaction_count) as max_calls_per_user
+        day,
+        -- User metrics
+        uniqExact(USER_ID) as active_users,
+        -- Average calls per user
+        sum(interaction_count) / uniqExact(USER_ID) as avg_calls_per_user,
+        -- Maximum calls per user
+        max(interaction_count) as max_calls_per_user
 FROM traces_user_engagement_data
 GROUP BY APP_ID, EVENT_DATE, day;
 
