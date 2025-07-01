@@ -41,16 +41,22 @@ spec:
             export PRISMA_GENERATE_SKIP_AUTOINSTALL=true
             export PRISMA_SKIP_POSTINSTALL_GENERATE=true
             
+            # Change to app directory
+            cd /app
+            
             # Try to find prisma in the image's node_modules
             if [ -f /app/node_modules/.bin/prisma ]; then
               echo "Using Prisma from /app/node_modules/.bin/prisma"
+              /app/node_modules/.bin/prisma migrate resolve --applied 1_scenario_types --schema=/app/prisma/schema.prisma
               /app/node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             elif [ -f /node_modules/.bin/prisma ]; then
               echo "Using Prisma from /node_modules/.bin/prisma"
+              /node_modules/.bin/prisma migrate resolve --applied 1_scenario_types --schema=/app/prisma/schema.prisma
               /node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
             else
               echo "Prisma CLI not found in node_modules, using npx as fallback"
               # Use npx with --prefer-offline to avoid network access if possible
+              npx --prefer-offline prisma migrate resolve --applied 1_scenario_types --schema=/app/prisma/schema.prisma
               npx --prefer-offline prisma migrate deploy --schema=/app/prisma/schema.prisma
             fi
             

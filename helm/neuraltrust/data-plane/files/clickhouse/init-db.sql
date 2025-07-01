@@ -74,7 +74,7 @@ ORDER BY (id);
 CREATE TABLE IF NOT EXISTS tests (
     id String,
     scenarioId String,
-    appId String,
+    targetId String,
     testCase String, -- JSON in ClickHouse is stored as String
     context String,  -- JSON in ClickHouse is stored as String
     type String,
@@ -83,13 +83,13 @@ CREATE TABLE IF NOT EXISTS tests (
     updatedAt DateTime DEFAULT now(),
     sign Int8
 ) ENGINE = CollapsingMergeTree(sign)
-ORDER BY (id, scenarioId, appId);
+ORDER BY (id, scenarioId, targetId);
 
 -- Tests Runs table
 CREATE TABLE IF NOT EXISTS test_runs (
     id String,
     scenarioId String,
-    appId String,
+    targetId String,
     testId String,
     runId String,
     executionId String,
