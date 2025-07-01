@@ -139,10 +139,14 @@ dataPlane:
           provider: "google"
           model: "gemini-2.0-flash"
           temperature: 0.2
+          retry_config:
+            attempts: 3
         question_generator:
           provider: "google"
           model: "gemini-2.0-flash"
           temperature: 0.5
+          retry_config:
+            attempts: 3
         embeddings:
           provider: "openai"
           model: "text-embedding-3-small"
@@ -150,6 +154,8 @@ dataPlane:
           provider: "google"
           model: "gemini-2.0-flash"
           temperature: 0.2
+          retry_config:
+            attempts: 3
       resources:
         requests:
           cpu: 400m
