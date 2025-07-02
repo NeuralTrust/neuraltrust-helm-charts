@@ -267,7 +267,7 @@ controlPlane:
       replicaCount: 2  # Standardized naming
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
-        tag: "v1.4.0"
+        tag: "v1.4.1"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret

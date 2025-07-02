@@ -103,7 +103,11 @@ spec:
               name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
-          value: "http://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          {{- if .Values.controlPlane.components.app.config.dataPlaneApiUrl }}
+          value: "{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-data-plane-api-service.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -196,7 +200,11 @@ spec:
               name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
-          value: "http://{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          {{- if .Values.controlPlane.components.app.config.dataPlaneApiUrl }}
+          value: "{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-data-plane-api-service.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
         - name: DATA_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
