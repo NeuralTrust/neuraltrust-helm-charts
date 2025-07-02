@@ -290,6 +290,7 @@ install_control_plane() {
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
+        --set global.openshift="$USE_OPENSHIFT" \
         --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
         --set controlPlane.secrets.openaiApiKey="$OPENAI_API_KEY" \
         --set controlPlane.components.postgresql.installInCluster="$INSTALL_POSTGRESQL" \

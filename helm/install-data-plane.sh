@@ -339,6 +339,7 @@ install_data_plane() {
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
+        --set global.openshift="$USE_OPENSHIFT" \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
         --set dataPlane.secrets.huggingFaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
