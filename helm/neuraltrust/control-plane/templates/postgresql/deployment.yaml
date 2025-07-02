@@ -15,11 +15,13 @@ spec:
       labels:
         app: {{ .Release.Name }}-postgresql
     spec:
+      {{- if not .Values.global.openshift }}
       securityContext:
         fsGroup: 999
         runAsUser: 999
         runAsGroup: 999
         runAsNonRoot: true
+      {{- end }}
       imagePullSecrets:
         {{- toYaml .Values.controlPlane.components.postgresql.imagePullSecrets | nindent 10 }}
       containers:
@@ -31,8 +33,10 @@ spec:
             drop:
               - ALL
           runAsNonRoot: true
+          {{- if not .Values.global.openshift }}
           runAsUser: 999
           runAsGroup: 999
+          {{- end }}
           seccompProfile:
             type: RuntimeDefault
         imagePullPolicy: {{ .Values.controlPlane.components.postgresql.image.pullPolicy }}

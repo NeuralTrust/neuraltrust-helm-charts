@@ -1,5 +1,5 @@
 global:
-  openshift: false # set to true if you are using openshift
+  openshift: true # set to true if you are using openshift
 
 dataPlane:
   enabled: true
