@@ -50,7 +50,7 @@ kubectl get secret data-plane-jwt-secret -n neuraltrust -o jsonpath='{.data.DATA
 Then we need to define *DATA_PLANE_API_URL*. This is the URL of the Data Plane API service. To gather this URL, you can use the following command. If you are deploying the Control Plane in the same cluster as the Data Plane, you can use:
 
 ```toml
-DATA_PLANE_API_URL="data-plane-api-service.neuraltrust.svc.cluster.local"
+DATA_PLANE_API_URL="http://data-plane-api-service.neuraltrust.svc.cluster.local"
 ```
 
 With this configuration defined, we can install the Control Plane components.
