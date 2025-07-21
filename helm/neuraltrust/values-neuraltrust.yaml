@@ -126,7 +126,7 @@ dataPlane:
       replicaCount: 2  # Standardized naming
       image:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
-        tag: v1.4.0
+        tag: v1.5.1
         pullPolicy: Always
         imagePullSecrets:
           - name: gcr-secret
@@ -223,7 +223,7 @@ controlPlane:
       replicaCount: 1  # Standardized naming
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/scheduler"
-        tag: "v1.2.6"
+        tag: "v1.4.0"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
@@ -267,7 +267,7 @@ controlPlane:
       replicaCount: 2  # Standardized naming
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/control-plane-api"
-        tag: "v1.4.1"
+        tag: "v1.5.1"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
@@ -314,7 +314,7 @@ controlPlane:
       replicaCount: 1
       image:
         repository: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/app"
-        tag: "v1.4.0"
+        tag: "v1.5.0"
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
