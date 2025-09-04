@@ -16,9 +16,9 @@ spec:
         app: worker
         plane: data
     spec:
-      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
+      {{- if .Values.dataPlane.components.worker.image.imagePullSecrets }}
       imagePullSecrets:
-        - name: gcr-secret
+        {{- toYaml .Values.dataPlane.components.worker.image.imagePullSecrets | nindent 8 }}
       {{- end }}
       containers:
       - name: worker
