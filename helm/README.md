@@ -71,7 +71,7 @@ For a manual installation without the quick start, you can follow the following 
 
 ### Data Plane
 
-1. Define GCR secret in your cluster.
+1. If you get the private images from our private docker registry: Define GCR secret in your cluster. Else skip this step.
 
 ```bash
 kubectl create -n "neuraltrust" secret docker-registry gcr-secret \
@@ -110,23 +110,20 @@ helm upgrade --install data-plane "./neuraltrust/data-plane" \
     --namespace "neuraltrust" \
     -f "./neuraltrust/values-neuraltrust.yaml" \
     --timeout 15m \
-    --set dataPlane.imagePullSecrets="$PULL_SECRET" \
+    --set global.openshift="$USE_OPENSHIFT" \ # set to true if you are using openshift, else false for kubernetes
+    --set dataPlane.imagePullSecrets="gcr-secret" \ # set to gcr-secret if you get the private images from our private docker registry
     --set dataPlane.secrets.huggingFaceToken="$HUGGINGFACE_TOKEN" \
     --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
-    --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \
-    --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \
-    --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-    # if you want to use s3 for clickhouse backup
-    --set dataPlane.components.clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \
-    --set dataPlane.components.clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \
-    # if you want to use gcs for clickhouse backup
-    --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
-    --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
-    # if you want to use ingress
-    --set dataPlane.components.api.ingress.enabled="define if you want to use ingress" \
+    --set dataPlane.secrets.openaiApiKey="${OPENAI_API_KEY:-}" \ # optional, set your openai api key for the default LLM model
+    --set dataPlane.secrets.googleApiKey="${GOOGLE_API_KEY:-}" \ # optional, set your google api key for the default LLM model
+    --set dataPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \ # optional, set your resend api key for the email sending
+    --set dataPlane.components.clickhouse.backup.s3.accessKey="${S3_ACCESS_KEY:-}" \ # optional, if you want to use s3 for clickhouse backup
+    --set dataPlane.components.clickhouse.backup.s3.secretKey="${S3_SECRET_KEY:-}" \ # optional, if you want to use s3 for clickhouse backup
+    --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \ # optional, if you want to use gcs for clickhouse backup
+    --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \ # optional, if you want to use gcs for clickhouse backup
+    --set dataPlane.components.api.ingress.enabled="false" \ # set to true if you want to use ingress, else false
     --wait
 ```
-
 
 ### Control Plane
 
@@ -137,17 +134,20 @@ helm upgrade --install control-plane "./neuraltrust/control-plane" \
     --namespace "neuraltrust" \
     -f "./neuraltrust/values-neuraltrust.yaml" \
     --timeout 15m \
-    --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
-    --set controlPlane.secrets.openaiApiKey="$OPENAI_API_KEY" \
-    --set controlPlane.components.postgresql.installInCluster="$INSTALL_POSTGRESQL" \
-    --set controlPlane.components.postgresql.secrets.password="$POSTGRES_PASSWORD" \
-    --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-    --set controlPlane.components.scheduler.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-    --set controlPlane.components.api.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-    --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
-    --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-    --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-    --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
+    --set global.openshift="$USE_OPENSHIFT" \ # set to true if you are using openshift, else false for kubernetes
+    --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \ # set your control plane jwt secret, use the same as the data plane jwt secret for simplicity
+    --set controlPlane.secrets.openaiApiKey="$OPENAI_API_KEY" \ # optional, set your openai api key for the default LLM model
+    --set controlPlane.components.postgresql.installInCluster="true" \ # set to true if you want to install the postgresql database in the cluster, else false
+    --set controlPlane.components.postgresql.secrets.password="$POSTGRES_PASSWORD" \ # set your postgres password
+    --set "controlPlane.components.postgresql.secrets.host=$POSTGRES_HOST_FINAL" \ # set your postgres host
+    --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \ # set your data plane api url
+    --set controlPlane.components.scheduler.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \ # set your data plane api url
+    --set controlPlane.components.api.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \ # set your data plane api url
+    --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \ # optional, set your resend api key for the email sending
+    --set controlPlane.components.scheduler.ingress.enabled="false" \ # set to true if you want to use ingress, else false
+    --set controlPlane.components.api.ingress.enabled="false" \ # set to true if you want to use ingress, else false
+    --set controlPlane.components.app.ingress.enabled="false" \ # set to true if you want to use ingress, else false
+    --set "controlPlane.imagePullSecrets=gcr-secret"  \ # set to gcr-secret if you get the private images from our private docker registry
     --wait
 ```
 
@@ -177,6 +177,11 @@ controlPlane:
         host: "set the host of the postgres database"
         port: "5432"
 ```
+
+### LLM configuration
+
+> [!IMPORTANT]  
+> Currently the platform allows to configure the LLM provider directly through the WebUI. Setting the OPENAI_API_KEY and GOOGLE_API_KEY values will only define the default LLM model to use inside NeuralTrust. So if you have a different LLM provider, you can just set a dummy value for the API key, and then configure the LLM provider through the WebUI.
 
 ### TrustTest configuration
 
