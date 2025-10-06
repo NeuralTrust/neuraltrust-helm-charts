@@ -65,7 +65,7 @@ Usage:
   {{- range (concat $relocatedImages $replacedImages) -}}
     {{- $errorString = print $errorString "\n  - " . -}}
   {{- end -}}
-  {{- if or (contains "docker.io/bitnami/" $originalImages) (contains "docker.io/bitnamiprem/" $originalImages) -}}
+  {{- if or (contains "docker.io/bitnamilegacy/" $originalImages) (contains "docker.io/bitnamiprem/" $originalImages) -}}
     {{- $errorString = print "\n\n⚠ ERROR: " $errorString -}}
     {{- $errorString = print $errorString "\n\nIf you are sure you want to proceed with non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to true." -}}
     {{- $errorString = print $errorString "\nFurther information can be obtained at https://github.com/bitnami/charts/issues/30850" -}}
