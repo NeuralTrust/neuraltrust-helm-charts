@@ -1,5 +1,5 @@
 apiVersion: v2
-name: neuraltrust-k8s-platform
+name: neuraltrust-platform
 description: A Helm chart for NeuralTrust infrastructure on Kubernetes with Ingress support.
 type: application
 version: 0.1.0
@@ -8,13 +8,13 @@ icon: https://kubernetes.io/images/favicon.png
 
 dependencies:
   # Local subchart dependencies
-  - name: control-plane
+  - name: neuraltrust-control-plane
     version: 0.1.0
     condition: controlPlane.enabled
     repository: file://./control-plane
     tags:
       - control-plane
-  - name: data-plane
+  - name: neuraltrust-data-plane
     version: 0.1.0
     condition: dataPlane.enabled
     repository: file://./data-plane

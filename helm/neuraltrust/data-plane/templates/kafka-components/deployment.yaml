@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-connect
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: {{ .Values.dataPlane.components.kafka.connect.replicas }}
   selector:
@@ -97,6 +98,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kafka-ui
+  namespace: {{ .Release.Namespace }}
   labels:
     app: kafka-ui
 spec:
@@ -127,6 +129,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: create-connectors
+  namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "1"
