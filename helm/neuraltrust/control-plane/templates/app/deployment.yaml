@@ -115,5 +115,28 @@ spec:
           {{- else }}
           value: "http://{{ .Release.Name }}-scheduler.{{ .Release.Namespace }}.svc.cluster.local"
           {{- end }}
+        - name: TRUSTGATE_CONTROL_PLANE_URL
+          value: "{{ .Values.controlPlane.components.app.config.trustgateControlPlaneUrl }}"
+        - name: TRUSTGATE_DATA_PLANE_URL
+          value: "{{ .Values.controlPlane.components.app.config.trustgateDataPlaneUrl }}"
+        - name: TRUSTGATE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: TRUSTGATE_JWT_SECRET
+        - name: FIREWALL_API_URL
+          value: "{{ .Values.controlPlane.components.app.config.firewallApiUrl }}"
+        - name: FIREWALL_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: FIREWALL_JWT_SECRET
+        - name: MODEL_SCANNER_API_URL
+          value: "{{ .Values.controlPlane.components.app.config.modelScannerApiUrl }}"
+        - name: MODEL_SCANNER_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: MODEL_SCANNER_SECRET
         resources:
           {{- toYaml .Values.controlPlane.components.app.resources | nindent 10 }}

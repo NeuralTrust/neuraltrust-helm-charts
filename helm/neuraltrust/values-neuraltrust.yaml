@@ -191,6 +191,9 @@ controlPlane:
     resendApiKey: ""  # Define this value
     resendAlertSender: ""  # Define this value
     resendInviteSender: ""  # Define this value
+    trustgateJwtSecret: ""  # Define this value
+    firewallJwtSecret: ""  # Define this value
+    modelScannerSecret: ""  # Define this value
   components:
     scheduler:
       enabled: true
@@ -323,6 +326,10 @@ controlPlane:
         port: 3000
         dataPlaneApiUrl: ""  # Define this value
         openaiModel: "gpt-4o-mini"
+        trustgateControlPlaneUrl: "https://admin.neuraltrust.ai"
+        trustgateDataPlaneUrl: "https://gateway.neuraltrust.ai"
+        firewallApiUrl: "http://firewall-api-prod.firewall-prod.svc.cluster.local:80"
+        modelScannerApiUrl: "https://trustscan.neuraltrust.ai/v1"
       resources:
         requests:
           memory: 512Mi
