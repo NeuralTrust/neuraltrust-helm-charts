@@ -101,3 +101,35 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "transforms.flattenJson.delimiter": "_"
   }
 }' 
+
+echo "Creating ClickHouse discover events sink connector..."
+curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+  "name": "clickhouse-discover-events-sink",
+  "config": {
+    "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
+    "tasks.max": "1",
+    "topics": "discover_events",
+    "hostname": "'${CLICKHOUSE_HOST}'",
+    "port": "'${CLICKHOUSE_PORT}'",
+    "database": "'${CLICKHOUSE_DATABASE}'",
+    "username": "'${CLICKHOUSE_USER}'",
+    "password": "'${CLICKHOUSE_PASSWORD}'",
+    "ssl": "false",
+    "exactlyOnce": "false",
+    "state.provider.class": "com.clickhouse.kafka.connect.sink.state.provider.FileStateProvider",
+    "state.provider.working.dir": "/tmp/clickhouse-sink",
+    "queue.max.wait.ms": "5000",
+    "retry.max.count": "5",
+    "errors.retry.timeout": "60",
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+    "table.name": "discover_events",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+    "transforms": "flattenJson",
+    "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
+    "transforms.flattenJson.delimiter": "_"
+  }
+}' 

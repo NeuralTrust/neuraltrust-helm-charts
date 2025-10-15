@@ -149,6 +149,7 @@ SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS metrics
 (
     gateway_id String,
+    engine_id String,
     trace_id String,
     interaction_id String,
     conversation_id String,
@@ -175,7 +176,7 @@ CREATE TABLE IF NOT EXISTS metrics
     event_hour DateTime MATERIALIZED toStartOfHour(start_time)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_date)
-ORDER BY (event_hour, gateway_id, trace_id)
+ORDER BY (event_hour, gateway_id, engine_id, trace_id)
 TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
@@ -222,9 +223,6 @@ CREATE TABLE IF NOT EXISTS traces_processed
     NUM_WORDS_RESPONSE Int32,
     LANG_PROMPT String,
     LANG_RESPONSE String,
-    MALICIOUS_PROMPT Int32,
-    MALICIOUS_PROMPT_SCORE Float64,
-    PURPOSE_LABEL String,
     SENTIMENT_PROMPT String,
     SENTIMENT_PROMPT_POSITIVE Float64,
     SENTIMENT_PROMPT_NEGATIVE Float64,
@@ -234,36 +232,6 @@ CREATE TABLE IF NOT EXISTS traces_processed
     SENTIMENT_RESPONSE_NEGATIVE Float64,
     SENTIMENT_RESPONSE_NEUTRAL Float64,
     
-    -- PII fields
-    PII_PHONE_PROMPT Int32,
-    PII_PHONE_RESPONSE Int32,
-    PII_CRYPTO_PROMPT Int32,
-    PII_CRYPTO_RESPONSE Int32,
-    PII_EMAIL_PROMPT Int32,
-    PII_EMAIL_RESPONSE Int32,
-    PII_CARD_PROMPT Int32,
-    PII_CARD_RESPONSE Int32,
-    PII_BANK_PROMPT Int32,
-    PII_BANK_RESPONSE Int32,
-    PII_IP_PROMPT Int32,
-    PII_IP_RESPONSE Int32,
-    PII_PERSON_PROMPT Int32,
-    PII_PERSON_RESPONSE Int32,
-    PII_PERSONAL_PROMPT Int32,
-    PII_PERSONAL_RESPONSE Int32,
-    PII_COMPANY_PROMPT Int32,
-    PII_COMPANY_RESPONSE Int32,
-    PII_MEDICAL_PROMPT Int32,
-    PII_MEDICAL_RESPONSE Int32,
-    PII_PASSPORT_PROMPT Int32,
-    PII_PASSPORT_RESPONSE Int32,
-    PII_DRIVING_PROMPT Int32,
-    PII_DRIVING_RESPONSE Int32,
-    PII_PROMPT Int32,
-    PII_RESPONSE Int32,
-    PII_PROMPT_LABEL Array(String),
-    PII_RESPONSE_LABEL Array(String),
-
     -- Partitioning fields
     EVENT_DATE Date MATERIALIZED toDate(START_TIME),
     EVENT_HOUR DateTime MATERIALIZED toStartOfHour(START_TIME)
@@ -351,17 +319,6 @@ AS SELECT
     
     -- Readability metrics
     avgState(READABILITY_RESPONSE) as READABILITY_RESPONSE_AVG_STATE,
-    
-    -- Security metrics
-    maxState(MALICIOUS_PROMPT) as MALICIOUS_PROMPT_STATE,
-    groupArrayState(MALICIOUS_PROMPT_SCORE) as MALICIOUS_PROMPT_SCORE_STATE,
-    
-    -- PII metrics
-    maxState(PII_PROMPT) as PII_PROMPT_STATE,
-    maxState(PII_RESPONSE) as PII_RESPONSE_STATE,
-    
-    -- Classification
-    argMaxState(PURPOSE_LABEL, START_TIMESTAMP) as PURPOSE_LABEL_STATE,
     
     -- Sample content (first message)
     argMinState(INPUT, START_TIMESTAMP) as FIRST_INPUT_STATE,
@@ -452,17 +409,6 @@ SELECT
     
     -- Readability metrics
     avgMerge(READABILITY_RESPONSE_AVG_STATE) as READABILITY_RESPONSE,
-    
-    -- Security metrics
-    maxMerge(MALICIOUS_PROMPT_STATE) as MALICIOUS_PROMPT,
-    groupArrayMerge(MALICIOUS_PROMPT_SCORE_STATE) as MALICIOUS_PROMPT_SCORE,
-    
-    -- PII metrics
-    maxMerge(PII_PROMPT_STATE) as PII_PROMPT,
-    maxMerge(PII_RESPONSE_STATE) as PII_RESPONSE,
-    
-    -- Classification
-    argMaxMerge(PURPOSE_LABEL_STATE) as PURPOSE_LABEL,
     
     -- Sample content
     argMinMerge(FIRST_INPUT_STATE) as FIRST_INPUT,
@@ -712,17 +658,6 @@ FROM traces_language_metrics
 GROUP BY APP_ID, EVENT_DATE, day, LANG_PROMPT
 ORDER BY APP_ID, EVENT_DATE, day, count DESC;
 
--- Total language metrics view
-CREATE VIEW IF NOT EXISTS traces_language_total AS
-SELECT
-    APP_ID,
-    LANG_PROMPT as language,
-    sum(language_count) as count
-FROM traces_language_metrics
-GROUP BY APP_ID, LANG_PROMPT
-ORDER BY APP_ID, count DESC;
-
-
 -- Device metrics view
 CREATE MATERIALIZED VIEW IF NOT EXISTS traces_device_metrics
 ENGINE = SummingMergeTree()
@@ -831,59 +766,6 @@ FROM traces_processed
 WHERE TASK = 'message' AND USER_ID != ''
 GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME), USER_ID;
 
--- Security metrics view with AggregatingMergeTree
-CREATE MATERIALIZED VIEW IF NOT EXISTS traces_security_metrics
-ENGINE = AggregatingMergeTree()
-PARTITION BY toYYYYMM(EVENT_DATE)
-ORDER BY (EVENT_DATE, APP_ID, day)
-AS SELECT
-    APP_ID,
-    EVENT_DATE,
-    toStartOfDay(START_TIME) as day,
-    -- Malicious content metrics
-    sumState(MALICIOUS_PROMPT) as malicious_prompt_state,
-    avgState(MALICIOUS_PROMPT_SCORE) as malicious_score_state,
-    
-    -- PII metrics - overall
-    sumState(PII_PROMPT) as pii_prompt_state,
-    sumState(PII_RESPONSE) as pii_response_state,
-    
-    -- PII metrics - detailed breakdown
-    sumState(PII_PHONE_PROMPT) as pii_phone_prompt_state,
-    sumState(PII_PHONE_RESPONSE) as pii_phone_response_state,
-    sumState(PII_CRYPTO_PROMPT) as pii_crypto_prompt_state,
-    sumState(PII_CRYPTO_RESPONSE) as pii_crypto_response_state,
-    sumState(PII_EMAIL_PROMPT) as pii_email_prompt_state,
-    sumState(PII_EMAIL_RESPONSE) as pii_email_response_state,
-    sumState(PII_CARD_PROMPT) as pii_card_prompt_state,
-    sumState(PII_CARD_RESPONSE) as pii_card_response_state,
-    sumState(PII_BANK_PROMPT) as pii_bank_prompt_state,
-    sumState(PII_BANK_RESPONSE) as pii_bank_response_state,
-    sumState(PII_IP_PROMPT) as pii_ip_prompt_state,
-    sumState(PII_IP_RESPONSE) as pii_ip_response_state,
-    sumState(PII_PERSON_PROMPT) as pii_person_prompt_state,
-    sumState(PII_PERSON_RESPONSE) as pii_person_response_state,
-    sumState(PII_PERSONAL_PROMPT) as pii_personal_prompt_state,
-    sumState(PII_PERSONAL_RESPONSE) as pii_personal_response_state,
-    sumState(PII_COMPANY_PROMPT) as pii_company_prompt_state,
-    sumState(PII_COMPANY_RESPONSE) as pii_company_response_state,
-    sumState(PII_MEDICAL_PROMPT) as pii_medical_prompt_state,
-    sumState(PII_MEDICAL_RESPONSE) as pii_medical_response_state,
-    sumState(PII_PASSPORT_PROMPT) as pii_passport_prompt_state,
-    sumState(PII_PASSPORT_RESPONSE) as pii_passport_response_state,
-    sumState(PII_DRIVING_PROMPT) as pii_driving_prompt_state,
-    sumState(PII_DRIVING_RESPONSE) as pii_driving_response_state,
-    
-    -- Count of messages with PII
-    uniqStateIf(INTERACTION_ID, PII_PROMPT > 0) as pii_prompt_messages_state,
-    uniqStateIf(INTERACTION_ID, PII_RESPONSE > 0) as pii_response_messages_state,
-    
-    -- Count of messages with malicious content
-    uniqStateIf(INTERACTION_ID, MALICIOUS_PROMPT > 0) as malicious_messages_state
-FROM traces_processed
-WHERE TASK = 'message'
-GROUP BY APP_ID, EVENT_DATE, toStartOfDay(START_TIME);
-
 -- Create a materialized view for daily classifier KPIs
 CREATE MATERIALIZED VIEW IF NOT EXISTS kpi_topics_1d
 ENGINE = AggregatingMergeTree()
@@ -910,13 +792,6 @@ AS SELECT
     -- Language metrics
     countState(LANG_PROMPT) AS lang_prompt_count_state,
     countState(LANG_RESPONSE) AS lang_response_count_state,
-    
-    -- PII metrics
-    uniqStateIf(INTERACTION_ID, PII_PROMPT > 0) AS pii_prompt_state,
-    uniqStateIf(INTERACTION_ID, PII_RESPONSE > 0) AS pii_response_state,
-    
-    -- Malicious content metrics
-    uniqStateIf(INTERACTION_ID, MALICIOUS_PROMPT > 0) AS malicious_prompt_state,
     
     -- Word count metrics
     sumState(NUM_WORDS_PROMPT) AS num_words_prompt_state,
@@ -970,9 +845,6 @@ FROM (
             SENTIMENT_RESPONSE_NEUTRAL,
             LANG_PROMPT,
             LANG_RESPONSE,
-            PII_PROMPT,
-            PII_RESPONSE,
-            MALICIOUS_PROMPT,
             NUM_WORDS_PROMPT,
             NUM_WORDS_RESPONSE,
             TOKENS_SPENT_PROMPT,
@@ -1048,12 +920,6 @@ SELECT
     countMerge(k.lang_prompt_count_state) AS LANG_PROMPT,
     countMerge(k.lang_response_count_state) AS LANG_RESPONSE,
     
-    -- PII metrics
-    uniqMerge(k.pii_prompt_state) AS PII_PROMPT,
-    uniqMerge(k.pii_response_state) AS PII_RESPONSE,
-    
-    -- Malicious content metrics
-    uniqMerge(k.malicious_prompt_state) AS MALICIOUS_PROMPT,
     
     -- Word count metrics
     sumMerge(k.num_words_prompt_state) AS NUM_WORDS_PROMPT,
