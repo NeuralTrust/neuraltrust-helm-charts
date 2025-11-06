@@ -181,6 +181,53 @@ TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
 
+CREATE TABLE IF NOT EXISTS discover_events (
+    timestamp UInt64,
+    submission_timestamp UInt64,
+    event_type String,
+    user_id String,
+    user_email String,
+    action String,
+    application_id String,
+    application_name String,
+    url String,
+    session_id String,
+    team_id String,
+    tab_id Nullable(UInt32),
+    extension_version Nullable(String),
+    user_agent Nullable(String),
+    prompt_text Nullable(String),
+    content_length Nullable(UInt32),
+    sensitive_data_types Array(String) DEFAULT [],
+    sensitive_data_categories Array(String) DEFAULT [],
+    sensitive_data_level Nullable(String),
+    sensitive_data_count UInt32 DEFAULT 0,
+    detection_method Nullable(String),
+    category Nullable(String),
+    frame_type Nullable(String),
+    date Date DEFAULT toDate(timestamp / 1000),
+    hour DateTime DEFAULT toDateTime(timestamp / 1000),
+    has_sensitive_data UInt8 DEFAULT if(sensitive_data_count > 0, 1, 0),
+    is_blocked UInt8 DEFAULT if(action = 'block', 1, 0),
+    is_warned UInt8 DEFAULT if(action = 'warn', 1, 0),
+    event_format String DEFAULT if(event_type IN ('navigation', 'widget_detected'), 'old', 'new'),
+    INDEX idx_team_id (team_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_application_id (application_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_event_type (event_type) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_action (action) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_session_id (session_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_sensitive_level (sensitive_data_level) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_category (category) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_has_sensitive (has_sensitive_data) TYPE minmax GRANULARITY 1,
+    INDEX idx_date (date) TYPE minmax GRANULARITY 1,
+    INDEX idx_hour (hour) TYPE minmax GRANULARITY 1
+    
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(date)
+ORDER BY (team_id, timestamp, session_id)
+TTL date + INTERVAL 12 MONTH
+SETTINGS index_granularity = 8192;
+
 -- Processed traces table with KPIs
 CREATE TABLE IF NOT EXISTS traces_processed
 (

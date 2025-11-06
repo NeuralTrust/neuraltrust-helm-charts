@@ -219,6 +219,53 @@ TTL event_date + INTERVAL 12 MONTH
 SETTINGS index_granularity = 8192;
 
 
+CREATE TABLE IF NOT EXISTS discover_events (
+    timestamp UInt64,
+    submission_timestamp UInt64,
+    event_type String,
+    user_id String,
+    user_email String,
+    action String,
+    application_id String,
+    application_name String,
+    url String,
+    session_id String,
+    team_id String,
+    tab_id Nullable(UInt32),
+    extension_version Nullable(String),
+    user_agent Nullable(String),
+    prompt_text Nullable(String),
+    content_length Nullable(UInt32),
+    sensitive_data_types Array(String) DEFAULT [],
+    sensitive_data_categories Array(String) DEFAULT [],
+    sensitive_data_level Nullable(String),
+    sensitive_data_count UInt32 DEFAULT 0,
+    detection_method Nullable(String),
+    category Nullable(String),
+    frame_type Nullable(String),
+    date Date DEFAULT toDate(timestamp / 1000),
+    hour DateTime DEFAULT toDateTime(timestamp / 1000),
+    has_sensitive_data UInt8 DEFAULT if(sensitive_data_count > 0, 1, 0),
+    is_blocked UInt8 DEFAULT if(action = 'block', 1, 0),
+    is_warned UInt8 DEFAULT if(action = 'warn', 1, 0),
+    event_format String DEFAULT if(event_type IN ('navigation', 'widget_detected'), 'old', 'new'),
+    INDEX idx_team_id (team_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_application_id (application_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_event_type (event_type) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_action (action) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_session_id (session_id) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_sensitive_level (sensitive_data_level) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_category (category) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_has_sensitive (has_sensitive_data) TYPE minmax GRANULARITY 1,
+    INDEX idx_date (date) TYPE minmax GRANULARITY 1,
+    INDEX idx_hour (hour) TYPE minmax GRANULARITY 1
+    
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(date)
+ORDER BY (team_id, timestamp, session_id)
+TTL date + INTERVAL 12 MONTH
+SETTINGS index_granularity = 8192;
+
 -- Processed traces table with KPIs
 CREATE TABLE IF NOT EXISTS traces_processed
 (
@@ -982,7 +1029,6 @@ FROM kpi_topics_1d k
 LEFT JOIN apps a ON k.APP_ID = a.id
 GROUP BY k.day, k.APP_ID, k.CLASSIFIER_ID, k.CATEGORY_ID, k.LABEL_ID, a.inputCost, a.outputCost;
 
-
 -- ============================================================================
 -- NEURALTRUST CLICKHOUSE SCHEMA - FULLY AUTOMATED
 -- ============================================================================
@@ -1695,24 +1741,45 @@ SELECT
     a.status as status,
     a.last_activity as last_activity,
     coalesce(g.guardian_count, 0) as guardian_invocations_24h,
+    coalesce(r.request_count_24h, 0) as requests_24h,
+    coalesce(r_total.request_count_total, 0) as requests_total,
     if(length(t.allowed_tools) > 0, t.allowed_tools, []) AS allowed_tools
 FROM deduplicated_agents a
 LEFT JOIN (
     SELECT 
+        team_id,
         agent_id,
         count() AS guardian_count
     FROM neuraltrust.guardian_invocations
     WHERE timestamp >= now() - INTERVAL 24 HOUR
-    GROUP BY agent_id
-) g ON a.agent_id = g.agent_id
+    GROUP BY team_id, agent_id
+) g ON a.team_id = g.team_id AND a.agent_id = g.agent_id
 LEFT JOIN (
     SELECT 
+        team_id,
+        agent_id,
+        count() AS request_count_24h
+    FROM neuraltrust.agent_requests
+    WHERE timestamp >= now() - INTERVAL 24 HOUR
+    GROUP BY team_id, agent_id
+) r ON a.team_id = r.team_id AND a.agent_id = r.agent_id
+LEFT JOIN (
+    SELECT 
+        team_id,
+        agent_id,
+        count() AS request_count_total
+    FROM neuraltrust.agent_requests
+    GROUP BY team_id, agent_id
+) r_total ON a.team_id = r_total.team_id AND a.agent_id = r_total.agent_id
+LEFT JOIN (
+    SELECT 
+        team_id,
         agent_id,
         groupArray(DISTINCT tool_name) AS allowed_tools
     FROM neuraltrust.agent_tool_permissions
     WHERE approved = true
-    GROUP BY agent_id
-) t ON a.agent_id = t.agent_id;
+    GROUP BY team_id, agent_id
+) t ON a.team_id = t.team_id AND a.agent_id = t.agent_id;
 
 -- View for agent permissions with request metrics
 -- Uses argMax to handle ReplacingMergeTree deduplication manually
