@@ -972,28 +972,28 @@ SELECT
     
     -- Sentiment metrics
     if(isNull(100.0 * uniqMerge(k.sentiment_prompt_positive_state) / 
-        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)),
+        nullIf(uniqMerge(k.messages_count_state), 0)),
         0,
         100.0 * uniqMerge(k.sentiment_prompt_positive_state) / 
-        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_POSITIVE,
+        nullIf(uniqMerge(k.messages_count_state), 0)) AS SENTIMENT_PROMPT_POSITIVE,
     
     if(isNull(100.0 * uniqMerge(k.sentiment_prompt_negative_state) / 
-        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)),
+        nullIf(uniqMerge(k.messages_count_state), 0)),
         0,
         100.0 * uniqMerge(k.sentiment_prompt_negative_state) / 
-        nullIf(uniqMerge(k.sentiment_prompt_positive_state) + uniqMerge(k.sentiment_prompt_negative_state), 0)) AS SENTIMENT_PROMPT_NEGATIVE,
+        nullIf(uniqMerge(k.messages_count_state), 0)) AS SENTIMENT_PROMPT_NEGATIVE,
     
     if(isNull(100.0 * uniqMerge(k.sentiment_response_positive_state) / 
-        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)),
+        nullIf(uniqMerge(k.messages_count_state), 0)),
         0,
         100.0 * uniqMerge(k.sentiment_response_positive_state) / 
-        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_POSITIVE,
+        nullIf(uniqMerge(k.messages_count_state), 0)) AS SENTIMENT_RESPONSE_POSITIVE,
     
     if(isNull(100.0 * uniqMerge(k.sentiment_response_negative_state) / 
-        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)),
+        nullIf(uniqMerge(k.messages_count_state), 0)),
         0,
         100.0 * uniqMerge(k.sentiment_response_negative_state) / 
-        nullIf(uniqMerge(k.sentiment_response_positive_state) + uniqMerge(k.sentiment_response_negative_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
+        nullIf(uniqMerge(k.messages_count_state), 0)) AS SENTIMENT_RESPONSE_NEGATIVE,
     
     -- Sentiment rate metrics
     100.0 * uniqMerge(k.sentiment_prompt_positive_state) / uniqMerge(k.messages_count_state) as SENTIMENT_PROMPT_POSITIVE_RATE,
