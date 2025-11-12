@@ -288,12 +288,43 @@ install_databases() {
 install_messaging() {
     log_info "Installing messaging system..."
 
-    # Install Kafka
+    # Install Kafka with increased timeout for provisioning
+    log_info "Installing Kafka (this may take several minutes for topic provisioning)..."
     helm upgrade --install kafka "./kafka" \
         --version "31.0.0" \
         --namespace "$NAMESPACE" \
         -f ./neuraltrust/values-kafka.yaml \
-        --wait
+        --timeout 30m \
+        --wait || {
+        log_warn "Kafka installation completed but provisioning job may have failed"
+        log_info "Checking provisioning job status..."
+        
+        # Check if provisioning job exists and its status
+        if kubectl get job kafka-provisioning -n "$NAMESPACE" &> /dev/null; then
+            PROVISIONING_STATUS=$(kubectl get job kafka-provisioning -n "$NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')
+            if [ "$PROVISIONING_STATUS" != "True" ]; then
+                log_warn "Kafka provisioning job did not complete successfully"
+                log_info "You can check the provisioning job logs with:"
+                log_info "  kubectl logs -n $NAMESPACE job/kafka-provisioning"
+                log_info ""
+                log_info "If provisioning failed, you can manually create topics or retry:"
+                log_info "  kubectl delete job kafka-provisioning -n $NAMESPACE"
+                log_info "  helm upgrade kafka ./kafka --namespace $NAMESPACE -f ./neuraltrust/values-kafka.yaml"
+            else
+                log_info "Kafka provisioning completed successfully"
+            fi
+        else
+            log_info "Provisioning job not found (may have been cleaned up by Helm hooks)"
+        fi
+        
+        # Verify Kafka broker is running
+        if kubectl get pods -n "$NAMESPACE" | grep -q "kafka-broker-0.*Running"; then
+            log_info "Kafka broker is running. Installation can continue."
+        else
+            log_error "Kafka broker is not running. Please check the installation."
+            exit 1
+        fi
+    }
 }
 
 # Function to install data plane components

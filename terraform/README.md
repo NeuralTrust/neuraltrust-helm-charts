@@ -1,12 +1,9 @@
 # NeuralTrust - Terraform
 
-> [!WARNING]  
-> This deployment is not updated to the latest version of the NeuralTrust platform.
-
 This directory contains Terraform configurations for deploying Kubernetes clusters across multiple cloud providers:
 
 - Azure (AKS)
-- AWS (EKS) Coming soon
+- AWS (EKS)
 - GCP (GKE) Coming soon
 
 ## Directory Structure

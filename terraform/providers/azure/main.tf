@@ -81,7 +81,6 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
   name                  = "user"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
   vm_size              = var.user_node_size
-  node_count           = var.user_node_count
   os_disk_size_gb      = var.user_node_disk_size
   vnet_subnet_id       = var.use_existing_vnet ? data.azurerm_subnet.existing[0].id : azurerm_subnet.main[0].id
 
@@ -91,10 +90,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "user" {
     "workload"               = "neuraltrust"
   }
 
-  # Enable auto-scaling
-  enable_auto_scaling = true
-  min_count          = var.user_node_min_count
-  max_count          = var.user_node_max_count
+  # Auto-scaling is enabled by setting min_count and max_count (without node_count)
+  min_count = var.user_node_min_count
+  max_count = var.user_node_max_count
 
   # Upgrade settings
   upgrade_settings {

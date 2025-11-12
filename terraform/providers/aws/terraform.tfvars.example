@@ -1,0 +1,94 @@
+# AWS Region Configuration
+region      = "eu-west-1"
+environment = "dev"
+
+# Common Tags
+common_tags = {
+  Project     = "neuraltrust"
+  Environment = "dev"
+  Team        = "platform"
+  ManagedBy   = "Terraform"
+}
+
+# Cluster Configuration
+cluster_name       = "my-eks-cluster"
+kubernetes_version = "1.28"
+
+# Network Configuration
+# Set existing_vpc_id to use an existing VPC, or leave null to create a new one
+existing_vpc_id = null
+vpc_cidr        = "10.0.0.0/16"
+
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
+
+enable_nat_gateway = true
+
+# Cluster Endpoint Configuration
+enable_private_endpoint = true
+enable_public_endpoint  = true
+public_access_cidrs     = ["0.0.0.0/0"] # Restrict this in production
+
+# Encryption Configuration
+# Set kms_key_id to use an existing KMS key, or leave null to create a new one
+kms_key_id = null
+
+# Logging Configuration
+enable_logging      = true
+cluster_log_types   = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+log_retention_days  = 7
+
+# Node Group Configuration
+node_count      = 3
+min_node_count  = 2
+max_node_count  = 10
+instance_type   = "t3.xlarge"
+disk_size_gb    = 100
+use_spot_instances = false
+
+node_labels = {
+  environment = "dev"
+  team        = "platform"
+}
+
+node_taints = []
+
+max_unavailable = 1
+
+# SSH Access Configuration
+enable_ssh_access  = false
+ssh_key_name       = null
+ssh_allowed_cidrs  = []
+
+# GPU Node Pool Configuration (optional)
+enable_gpu_node_pool        = false
+gpu_node_pool_name          = "gpu-pool"
+gpu_instance_types          = ["g4dn.xlarge"]
+gpu_node_pool_count         = 1
+gpu_node_pool_min_count     = 0
+gpu_node_pool_max_count     = 5
+gpu_node_pool_disk_size_gb  = 100
+gpu_node_pool_taints = [
+  {
+    key    = "nvidia.com/gpu"
+    value  = "present"
+    effect = "NO_SCHEDULE"
+  }
+]
+
+# EKS Add-ons Configuration
+enable_vpc_cni        = true
+enable_vpc_cni_addon  = true
+vpc_cni_addon_version = null # Use latest if null
+
+enable_coredns_addon  = true
+coredns_addon_version = null # Use latest if null
+
+enable_kube_proxy_addon  = true
+kube_proxy_addon_version = null # Use latest if null
+
+enable_ebs_csi_addon  = false
+ebs_csi_addon_version = null # Use latest if null
+
+enable_cloudwatch_logs = true
+

@@ -10,9 +10,6 @@ terraform {
 provider "azurerm" {
   features {}
 
-  # Disable resource provider registration
-  skip_provider_registration = true
-
   # Service Principal Authentication
   client_id       = var.client_id
   client_secret   = var.client_secret

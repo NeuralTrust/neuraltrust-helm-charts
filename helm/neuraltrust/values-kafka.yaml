@@ -52,6 +52,39 @@ broker:
 provisioning:
   enabled: true
   replicationFactor: 1
+  # Wait for Kafka to be fully ready before provisioning
+  waitForKafka: true
+  # Use Helm hooks to manage provisioning job lifecycle
+  useHelmHooks: true
+  # Increase resources for faster topic creation (50 partitions per topic)
+  resourcesPreset: "small"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Pre-script to ensure Kafka is fully ready and add retry logic
+  preScript: |
+    echo "Waiting for Kafka to be fully ready..."
+    max_attempts=30
+    attempt=0
+    while [ $attempt -lt $max_attempts ]; do
+      if /opt/bitnami/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server ${KAFKA_SERVICE} > /dev/null 2>&1; then
+        echo "Kafka is ready!"
+        break
+      fi
+      attempt=$((attempt + 1))
+      echo "Attempt $attempt/$max_attempts: Kafka not ready yet, waiting 10 seconds..."
+      sleep 10
+    done
+    if [ $attempt -eq $max_attempts ]; then
+      echo "ERROR: Kafka did not become ready after $max_attempts attempts"
+      exit 1
+    fi
+    echo "Kafka is ready, proceeding with topic provisioning..."
+  # Topics to provision
   topics:
     - name: __consumer_offsets
       partitions: 50
@@ -70,3 +103,12 @@ zookeeper:
   auth:
     client:
       enabled: false
+  # Fix CPU quota cgroup v2 compatibility issue
+  # Use 500m instead of default 375m to avoid cgroup quota errors
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
