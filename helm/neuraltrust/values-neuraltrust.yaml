@@ -123,7 +123,6 @@ dataPlane:
           enabled: true
           secretName: ""  # Leave empty to auto-generate per-service secrets
       classifierModel: "gpt"
-      replicaCount: 2  # Standardized naming
       image:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
         tag: v1.6.2
@@ -156,13 +155,14 @@ dataPlane:
           temperature: 0.2
           retry_config:
             attempts: 3
+      replicas: 4
       resources:
         requests:
-          cpu: 400m
+          cpu: 1
           memory: 2Gi
         limits:
-          cpu: 800m
-          memory: 6Gi
+          cpu: 2
+          memory: 3Gi
     worker:
       enabled: true
       replicas: 1
