@@ -155,7 +155,7 @@ dataPlane:
           temperature: 0.2
           retry_config:
             attempts: 3
-      replicas: 2
+      replicas: 4
       resources:
         requests:
           cpu: 1
