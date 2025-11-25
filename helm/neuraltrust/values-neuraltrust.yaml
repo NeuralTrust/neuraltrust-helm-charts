@@ -146,6 +146,12 @@ dataPlane:
           temperature: 0.5
           retry_config:
             attempts: 3
+        translation:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.5
+          retry_config:
+            attempts: 3
         embeddings:
           provider: "openai"
           model: "text-embedding-3-small"
@@ -375,3 +381,12 @@ controlPlane:
         type: ClusterIP
         port: 5432
 
+
+
+env:
+  - name: POSTGRES_SSL
+    value: "false"
+
+containerSecurityContext:
+  seccompProfile:
+    type: Unconfined
