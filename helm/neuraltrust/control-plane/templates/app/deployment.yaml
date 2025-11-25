@@ -57,6 +57,12 @@ spec:
             exit 1
           fi
 
+          echo "Running Prisma db push..."
+          if ! npx prisma db push; then
+            echo "ERROR: Prisma db push failed!"
+            exit 1
+          fi
+
           echo "Running Prisma seed..."
           if ! npx prisma db seed; then
             echo "ERROR: Prisma seed failed!"
