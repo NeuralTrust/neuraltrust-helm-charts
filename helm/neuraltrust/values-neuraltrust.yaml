@@ -380,13 +380,3 @@ controlPlane:
       service: # only used if installInCluster is true
         type: ClusterIP
         port: 5432
-
-
-
-env:
-  - name: POSTGRES_SSL
-    value: "false"
-
-containerSecurityContext:
-  seccompProfile:
-    type: Unconfined

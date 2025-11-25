@@ -12,8 +12,6 @@ zookeeper:
   enabled: false
 
 persistence:
-  enabled: true
-  storageClass: ""
   size: "100Gi"
 
 resources:
@@ -36,18 +34,3 @@ securityContext:
 # OpenShift specific settings
 openshift:
   enabled: true
-
-# CephFS compatibility configuration
-# CephFS doesn't support renameat2() system call used by ClickHouse Atomic engine
-extraOverrides: |
-  <clickhouse>
-    <merge_tree>
-      <!-- Disable fsync for metadata to avoid filesystem incompatibilities -->
-      <fsync_metadata>0</fsync_metadata>
-    </merge_tree>
-  </clickhouse>
-
-# Environment variables for CephFS compatibility
-extraEnvVars:
-  - name: CLICKHOUSE_DO_NOT_CHROOT
-    value: "1"
