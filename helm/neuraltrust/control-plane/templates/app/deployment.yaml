@@ -180,6 +180,11 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: CONTROL_PLANE_JWT_SECRET
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-secrets
+              key: CONTROL_PLANE_JWT_SECRET
         - name: DATA_PLANE_API_URL
           {{- if .Values.controlPlane.components.app.config.dataPlaneApiUrl }}
           value: "{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"

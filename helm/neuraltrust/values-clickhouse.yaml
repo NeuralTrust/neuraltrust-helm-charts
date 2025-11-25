@@ -33,4 +33,4 @@ securityContext:
 
 # OpenShift specific settings
 openshift:
-  enabled: true 
+  enabled: true
