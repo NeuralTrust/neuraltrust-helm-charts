@@ -86,8 +86,6 @@ spec:
                 name: clickhouse
                 key: admin-password
         volumeMounts:
-          - name: huggingface-cache
-            mountPath: "/root/.cache/huggingface"
           {{- if .Values.dataPlane.components.api.trustTestConfig }}
           - name: trusttest-config-volume
             mountPath: /app/.trusttest_config.json # Assuming app runs from /app
@@ -132,9 +130,6 @@ spec:
           successThreshold: 1
           failureThreshold: 30
       volumes:
-      - name: huggingface-cache
-        persistentVolumeClaim:
-          claimName: "{{ .Release.Name }}-huggingface-cache"
       {{- if .Values.dataPlane.components.api.trustTestConfig }}
       - name: trusttest-config-volume
         configMap:
