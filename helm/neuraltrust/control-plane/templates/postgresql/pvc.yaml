@@ -5,6 +5,10 @@ metadata:
   name: {{ .Release.Name }}-postgresql-pvc
   labels:
     app: {{ .Release.Name }}-postgresql
+  {{- if (.Values.controlPlane.components.postgresql.persistence.preserveOnDelete | default true) }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes:
     - ReadWriteOnce

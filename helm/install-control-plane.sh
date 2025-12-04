@@ -279,6 +279,16 @@ install_control_plane() {
         OPTIONAL_OVERRIDES+=(--set "controlPlane.components.postgresql.secrets.host=$POSTGRES_HOST_FINAL")
     fi
 
+    # Always set optional secrets (even if empty) to ensure they exist in the Kubernetes secret
+    # This prevents deployment failures when the deployment references these keys
+    # Use explicit empty string quotes to ensure Helm sets the values even when empty
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendApiKey=\"${RESEND_API_KEY:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendAlertSender=\"${RESEND_ALERT_SENDER:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendInviteSender=\"${RESEND_INVITE_SENDER:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.trustgateJwtSecret=\"${TRUSTGATE_JWT_SECRET:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.firewallJwtSecret=\"${FIREWALL_JWT_SECRET:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.modelScannerSecret=\"${MODEL_SCANNER_SECRET:-}\"")
+
     if [ -z "$POSTGRES_PASSWORD" ]; then
         log_error "POSTGRES_PASSWORD is not set. Please set it in the environment variables."
         exit 1
@@ -298,7 +308,6 @@ install_control_plane() {
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.scheduler.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.api.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
         --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \

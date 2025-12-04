@@ -364,6 +364,7 @@ controlPlane:
         enabled: true
         size: 10Gi
         storageClass: ""
+        preserveOnDelete: true  # If true, PVC will be preserved when Helm release is deleted
       resources: # only used if installInCluster is true
         requests:
           memory: 512Mi
