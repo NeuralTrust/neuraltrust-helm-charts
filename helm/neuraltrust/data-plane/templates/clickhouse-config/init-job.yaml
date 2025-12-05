@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   template:
     metadata:
@@ -23,8 +23,17 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              echo "Running initialization scripts..."
+              set -e
+              echo "Waiting for ClickHouse to be ready..."
+              until clickhouse-client --host $CLICKHOUSE_HOST --user $CLICKHOUSE_USER --password $CLICKHOUSE_PASSWORD --query "SELECT 1" &> /dev/null; do
+                echo "ClickHouse is not ready yet, waiting..."
+                sleep 2
+              done
+              echo "ClickHouse is ready, running initialization scripts..."
+              # Ensure user exists (idempotent)
+              clickhouse-client --host $CLICKHOUSE_HOST --user default --password $CLICKHOUSE_PASSWORD --query "CREATE USER IF NOT EXISTS $CLICKHOUSE_USER IDENTIFIED WITH sha256_password BY '$CLICKHOUSE_PASSWORD'" || echo "User may already exist or creation failed, continuing..."
               clickhouse-client --host $CLICKHOUSE_HOST --user $CLICKHOUSE_USER --password $CLICKHOUSE_PASSWORD -n < /init-db/init-db.sql
+              echo "Initialization completed successfully"
           env:
             - name: CLICKHOUSE_HOST
               valueFrom:

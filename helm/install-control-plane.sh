@@ -261,8 +261,48 @@ install_control_plane() {
     
     if [ "$INSTALL_POSTGRESQL" = true ]; then
         POSTGRES_HOST_FINAL="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
+        # PostgreSQL will be installed as part of the Helm release, no need to check before
+        log_info "PostgreSQL will be installed as part of the control-plane release"
     elif [ -n "$POSTGRES_HOST" ]; then
         POSTGRES_HOST_FINAL="$POSTGRES_HOST"
+        # Verify external PostgreSQL is accessible
+        log_info "Verifying PostgreSQL connection at $POSTGRES_HOST_FINAL..."
+        POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+        
+        # If it's a Kubernetes service (contains .svc.), verify using a temporary pod
+        if echo "$POSTGRES_HOST_FINAL" | grep -q "\.svc\."; then
+            log_info "PostgreSQL appears to be a Kubernetes service, verifying with temporary pod..."
+            MAX_WAIT=60
+            WAIT_COUNT=0
+            while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+                # Use a temporary pod to check connectivity
+                if $KUBECTL_CMD run postgres-check-$$ --image=postgres:17.2-alpine --rm -i --restart=Never -n "$NAMESPACE" -- \
+                    sh -c "nc -z -w 2 $POSTGRES_HOST_FINAL $POSTGRES_PORT" 2>/dev/null; then
+                    log_info "PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+                    break
+                fi
+                WAIT_COUNT=$((WAIT_COUNT + 1))
+                if [ $((WAIT_COUNT % 10)) -eq 0 ]; then
+                    log_info "Waiting for PostgreSQL connection... ($WAIT_COUNT/$MAX_WAIT seconds)"
+                fi
+                sleep 1
+            done
+            if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+                log_warn "Could not verify PostgreSQL connection, but continuing with deployment..."
+            fi
+        else
+            # External host - try nc if available
+            if command -v nc >/dev/null 2>&1; then
+                log_info "Checking external PostgreSQL connection..."
+                if nc -z -w 2 "$POSTGRES_HOST_FINAL" "$POSTGRES_PORT" 2>/dev/null; then
+                    log_info "PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+                else
+                    log_warn "Could not verify PostgreSQL connection from host, but continuing with deployment..."
+                fi
+            else
+                log_info "nc not available, assuming PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+            fi
+        fi
     fi
     
     # Build optional configuration overrides for non-sensitive data
@@ -312,7 +352,8 @@ install_control_plane() {
         --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         "${OPTIONAL_OVERRIDES[@]}" \
-        --wait
+        --wait-for-jobs \
+        --timeout 10m
 
 
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"

@@ -382,7 +382,8 @@ install_data_plane() {
         --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
         --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
         --set dataPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-        --wait
+        --wait-for-jobs \
+        --timeout 10m
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"
 }
