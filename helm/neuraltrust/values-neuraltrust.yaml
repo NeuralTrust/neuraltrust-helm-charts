@@ -330,6 +330,8 @@ controlPlane:
         trustgateDataPlaneUrl: "https://gateway.neuraltrust.ai"
         firewallApiUrl: "http://firewall-api-prod.firewall-prod.svc.cluster.local:80"
         modelScannerApiUrl: "https://trustscan.neuraltrust.ai/v1"
+        kafkaHost: "kafka"
+        kafkaPort: "9092"
       resources:
         requests:
           memory: 512Mi
