@@ -1,16 +1,60 @@
 #!/bin/sh
 
 NAMESPACE=${1:-neuraltrust}
+KAFKA_CONNECT_URL="http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083"
 echo "NAMESPACE: ${NAMESPACE}"
 
 echo "Waiting for Kafka Connect to be ready..."
-until curl -s http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors > /dev/null; do
+until curl -s ${KAFKA_CONNECT_URL}/connectors > /dev/null; do
   sleep 5
   echo "Waiting..."
 done
 
+echo "Kafka Connect is ready!"
+
+# Function to check if a connector exists
+connector_exists() {
+  local connector_name=$1
+  if curl -s -f ${KAFKA_CONNECT_URL}/connectors/${connector_name} > /dev/null 2>&1; then
+    return 0  # Connector exists
+  else
+    return 1  # Connector does not exist
+  fi
+}
+
+# Function to create or update a connector
+create_or_update_connector() {
+  local connector_name=$1
+  local connector_config=$2
+  
+  if connector_exists "${connector_name}"; then
+    echo "Connector '${connector_name}' already exists, skipping creation."
+    return 0
+  else
+    echo "Creating connector '${connector_name}'..."
+    local response=$(curl -s -w "\n%{http_code}" -X POST ${KAFKA_CONNECT_URL}/connectors \
+      -H "Content-Type: application/json" \
+      -d "${connector_config}")
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" -eq 201 ] || [ "$http_code" -eq 200 ]; then
+      echo "✓ Successfully created connector '${connector_name}'"
+      return 0
+    else
+      echo "✗ Failed to create connector '${connector_name}'. HTTP code: ${http_code}"
+      echo "Response: ${body}"
+      return 1
+    fi
+  fi
+}
+
+echo "Checking existing connectors..."
+EXISTING_CONNECTORS=$(curl -s ${KAFKA_CONNECT_URL}/connectors 2>/dev/null || echo "[]")
+echo "Existing connectors: ${EXISTING_CONNECTORS}"
+
 echo "Creating ClickHouse traces_processed sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-traces-processed-sink" '{
   "name": "clickhouse-traces-processed-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -39,10 +83,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
     "transforms.flattenJson.delimiter": "_"
   }
-}' 
+}'
 
 echo "Creating ClickHouse metrics sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-metrics-sink" '{
   "name": "clickhouse-metrics-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -68,10 +112,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": "false"
   }
-}' 
+}'
 
 echo "Creating ClickHouse traces sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-traces-sink" '{
   "name": "clickhouse-traces-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -100,10 +144,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
     "transforms.flattenJson.delimiter": "_"
   }
-}' 
+}'
 
 echo "Creating ClickHouse discover events sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-discover-events-sink" '{
   "name": "clickhouse-discover-events-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -132,10 +176,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "transforms.flattenJson.type": "org.apache.kafka.connect.transforms.Flatten$Value",
     "transforms.flattenJson.delimiter": "_"
   }
-}' 
+}'
 
 echo "Creating ClickHouse agents events sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-agents-events-sink" '{
   "name": "clickhouse-agents-events-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -164,10 +208,10 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "transforms.hoist.type": "org.apache.kafka.connect.transforms.HoistField$Value",
     "transforms.hoist.field": "raw_json"
   }
-}' 
+}'
 
 echo "Creating ClickHouse gpt_usage sink connector..."
-curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connectors -H "Content-Type: application/json" -d '{
+create_or_update_connector "clickhouse-gpt-usage-sink" '{
   "name": "clickhouse-gpt-usage-sink",
   "config": {
     "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
@@ -199,4 +243,28 @@ curl -X POST http://kafka-connect-svc.${NAMESPACE}.svc.cluster.local:8083/connec
     "primary.key.mode": "record_value",
     "delete.enabled": "true"
   }
-}' 
+}'
+
+echo ""
+echo "=== Connector creation summary ==="
+echo "Checking final connector status..."
+FINAL_CONNECTORS=$(curl -s ${KAFKA_CONNECT_URL}/connectors 2>/dev/null || echo "[]")
+echo "All connectors: ${FINAL_CONNECTORS}"
+
+# Verify all expected connectors exist
+EXPECTED_CONNECTORS="clickhouse-traces-processed-sink clickhouse-metrics-sink clickhouse-traces-sink clickhouse-discover-events-sink clickhouse-agents-events-sink clickhouse-gpt-usage-sink"
+MISSING_CONNECTORS=""
+
+for connector in ${EXPECTED_CONNECTORS}; do
+  if ! connector_exists "${connector}"; then
+    MISSING_CONNECTORS="${MISSING_CONNECTORS} ${connector}"
+  fi
+done
+
+if [ -n "${MISSING_CONNECTORS}" ]; then
+  echo "WARNING: The following connectors are missing:${MISSING_CONNECTORS}"
+  exit 1
+else
+  echo "✓ All expected connectors are present!"
+  exit 0
+fi
