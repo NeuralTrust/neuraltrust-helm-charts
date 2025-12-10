@@ -4,6 +4,15 @@ CREATE DATABASE IF NOT EXISTS neuraltrust;
 -- Switch to the database
 USE neuraltrust;
 
+-- Migration tracking table
+CREATE TABLE IF NOT EXISTS schema_migrations
+(
+    migrationHash String,
+    appliedAt DateTime64(6, 'UTC') DEFAULT now64(6),
+    PRIMARY KEY (migrationHash)
+) ENGINE = ReplacingMergeTree(appliedAt)
+ORDER BY (migrationHash);
+
 -- Teams table
 CREATE TABLE IF NOT EXISTS teams
 (

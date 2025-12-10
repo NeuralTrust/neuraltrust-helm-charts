@@ -57,7 +57,22 @@ metadata:
 spec:
   host: {{ .Values.controlPlane.components.api.host | quote }}
   tls:
-    termination: edge
+    termination: {{ .Values.controlPlane.components.api.ingress.tls.termination | default "edge" }}
+    {{- if .Values.controlPlane.components.api.ingress.tls.certificate }}
+    certificate: {{ .Values.controlPlane.components.api.ingress.tls.certificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.api.ingress.tls.key }}
+    key: {{ .Values.controlPlane.components.api.ingress.tls.key | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.api.ingress.tls.caCertificate }}
+    caCertificate: {{ .Values.controlPlane.components.api.ingress.tls.caCertificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.api.ingress.tls.destinationCACertificate }}
+    destinationCACertificate: {{ .Values.controlPlane.components.api.ingress.tls.destinationCACertificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.api.ingress.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ .Values.controlPlane.components.api.ingress.tls.insecureEdgeTerminationPolicy }}
+    {{- end }}
   to:
     kind: Service
     name: "{{ .Release.Name }}-api-service"

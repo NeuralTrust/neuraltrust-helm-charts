@@ -16,14 +16,19 @@ spec:
         app: worker
         plane: data
     spec:
-      {{- if .Values.dataPlane.components.worker.image.imagePullSecrets }}
+      {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.worker .Values.dataPlane.components.worker.image .Values.dataPlane.components.worker.image.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml .Values.dataPlane.components.worker.image.imagePullSecrets | nindent 8 }}
       {{- end }}
       containers:
       - name: worker
-        image: "{{ .Values.dataPlane.components.worker.image.repository }}:{{ .Values.dataPlane.components.worker.image.tag }}"
-        imagePullPolicy: "{{ .Values.dataPlane.components.worker.image.pullPolicy }}"
+        {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.worker .Values.dataPlane.components.worker.image }}
+        image: "{{ .Values.dataPlane.components.worker.image.repository | default "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers" }}:{{ .Values.dataPlane.components.worker.image.tag | default "v1.4.0-with-models" }}"
+        imagePullPolicy: "{{ .Values.dataPlane.components.worker.image.pullPolicy | default "Always" }}"
+        {{- else }}
+        image: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/workers:v1.4.0-with-models"
+        imagePullPolicy: "Always"
+        {{- end }}
         env:
         - name: ENV
           value: "prod"
@@ -37,12 +42,12 @@ spec:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.dataPlane.secrets.openaiApiKeySecretName }}
+              name: {{ if and .Values.dataPlane .Values.dataPlane.secrets .Values.dataPlane.secrets.openaiApiKeySecretName }}{{ .Values.dataPlane.secrets.openaiApiKeySecretName }}{{ else }}openai-secrets{{ end }}
               key: OPENAI_API_KEY
         - name: GOOGLE_API_KEY
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.dataPlane.secrets.googleApiKeySecretName }}
+              name: {{ if and .Values.dataPlane .Values.dataPlane.secrets .Values.dataPlane.secrets.googleApiKeySecretName }}{{ .Values.dataPlane.secrets.googleApiKeySecretName }}{{ else }}google-secrets{{ end }}
               key: GOOGLE_API_KEY
         - name: CLICKHOUSE_HOST
           valueFrom:
@@ -68,7 +73,16 @@ spec:
               key: CLICKHOUSE_DATABASE
         command: ["python", "-u", "src/listen.py"]
         resources:
+          {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.worker .Values.dataPlane.components.worker.resources }}
           {{- toYaml .Values.dataPlane.components.worker.resources | nindent 10 }}
+          {{- else }}
+          requests:
+            memory: 4Gi
+            cpu: 1000m
+          limits:
+            memory: 8Gi
+            cpu: 2000m
+          {{- end }}
         startupProbe:
           exec:
             command:
