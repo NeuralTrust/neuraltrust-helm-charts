@@ -103,6 +103,8 @@ spec:
             secretKeyRef:
               name: postgresql-secrets
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_SSL
+          value: "{{ .Values.controlPlane.components.api.config.postgresSsl | default false }}"
         - name: CONTROL_PLANE_JWT_SECRET
           valueFrom:
             secretKeyRef:
