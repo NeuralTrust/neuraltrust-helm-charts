@@ -137,6 +137,12 @@ dataPlane:
           temperature: 0.2
           retry_config:
             attempts: 3
+        translation:
+          provider: "google"
+          model: "gemini-2.0-flash"
+          temperature: 0.2
+          retry_config:
+            attempts: 3
         question_generator:
           provider: "google"
           model: "gemini-2.0-flash"
@@ -279,6 +285,7 @@ controlPlane:
         controlPlaneJWTSecret: ""  # Define this value
       config:
         dataPlaneApiUrl: ""  # Define this value
+        postgresSsl: false  # Enable SSL for PostgreSQL connections
       resources:
         requests:
           memory: 512Mi
