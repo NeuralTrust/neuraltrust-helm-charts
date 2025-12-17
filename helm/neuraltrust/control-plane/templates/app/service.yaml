@@ -94,6 +94,18 @@ spec:
   port:
     targetPort: http
   tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
+    termination: {{ .Values.controlPlane.components.app.ingress.tls.termination | default "edge" }}
+    {{- if .Values.controlPlane.components.app.ingress.tls.certificate }}
+    certificate: {{ .Values.controlPlane.components.app.ingress.tls.certificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.app.ingress.tls.key }}
+    key: {{ .Values.controlPlane.components.app.ingress.tls.key | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.app.ingress.tls.caCertificate }}
+    caCertificate: {{ .Values.controlPlane.components.app.ingress.tls.caCertificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.app.ingress.tls.destinationCACertificate }}
+    destinationCACertificate: {{ .Values.controlPlane.components.app.ingress.tls.destinationCACertificate | quote }}
+    {{- end }}
+    insecureEdgeTerminationPolicy: {{ .Values.controlPlane.components.app.ingress.tls.insecureEdgeTerminationPolicy | default "Redirect" }}
 {{- end }}

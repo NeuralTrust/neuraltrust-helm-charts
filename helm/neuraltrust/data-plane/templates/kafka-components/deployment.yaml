@@ -4,7 +4,7 @@ metadata:
   name: kafka-connect
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: {{ .Values.dataPlane.components.kafka.connect.replicas }}
+  replicas: {{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}
   selector:
     matchLabels:
       app: kafka-connect
@@ -13,14 +13,56 @@ spec:
       labels:
         app: kafka-connect
     spec:
-      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
+      {{- $useGcrSecret := false }}
+      {{- if and .Values.dataPlane .Values.dataPlane.imagePullSecrets }}
+        {{- if kindIs "string" .Values.dataPlane.imagePullSecrets }}
+          {{- if eq .Values.dataPlane.imagePullSecrets "gcr-secret" }}
+          {{- $useGcrSecret = true }}
+          {{- end }}
+        {{- else if kindIs "slice" .Values.dataPlane.imagePullSecrets }}
+          {{- range .Values.dataPlane.imagePullSecrets }}
+            {{- if kindIs "string" . }}
+              {{- if eq . "gcr-secret" }}
+              {{- $useGcrSecret = true }}
+              {{- end }}
+            {{- else if kindIs "map" . }}
+              {{- if and (hasKey . "name") (eq .name "gcr-secret") }}
+              {{- $useGcrSecret = true }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        {{- else if kindIs "map" .Values.dataPlane.imagePullSecrets }}
+          {{- if and (hasKey .Values.dataPlane.imagePullSecrets "name") (eq .Values.dataPlane.imagePullSecrets.name "gcr-secret") }}
+          {{- $useGcrSecret = true }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect .Values.dataPlane.components.kafka.connect.image .Values.dataPlane.components.kafka.connect.image.imagePullSecrets }}
+        {{- range .Values.dataPlane.components.kafka.connect.image.imagePullSecrets }}
+          {{- if kindIs "string" . }}
+            {{- if eq . "gcr-secret" }}
+            {{- $useGcrSecret = true }}
+            {{- end }}
+          {{- else if kindIs "map" . }}
+            {{- if and (hasKey . "name") (eq .name "gcr-secret") }}
+            {{- $useGcrSecret = true }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if $useGcrSecret }}
       imagePullSecrets:
         - name: gcr-secret
       {{- end }}
       containers:
         - name: kafka-connect
-          image: "{{.Values.dataPlane.components.kafka.connect.image.repository}}:{{ .Values.dataPlane.components.kafka.connect.image.tag }}"
-          imagePullPolicy: {{ .Values.dataPlane.components.kafka.connect.image.pullPolicy }}
+          {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect .Values.dataPlane.components.kafka.connect.image }}
+          image: "{{ .Values.dataPlane.components.kafka.connect.image.repository | default "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect" }}:{{ .Values.dataPlane.components.kafka.connect.image.tag | default "v0.0.1" }}"
+          imagePullPolicy: {{ .Values.dataPlane.components.kafka.connect.image.pullPolicy | default "Always" }}
+          {{- else }}
+          image: "europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect:v0.0.1"
+          imagePullPolicy: Always
+          {{- end }}
           ports:
             - containerPort: 8083
           readinessProbe:
@@ -57,11 +99,11 @@ spec:
             - name: CONNECT_STATUS_STORAGE_TOPIC
               value: "connect-status"
             - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: CONNECT_KEY_CONVERTER
               value: "org.apache.kafka.connect.storage.StringConverter"
             - name: CONNECT_VALUE_CONVERTER
@@ -79,51 +121,32 @@ spec:
             - name: CONNECT_LOG4J_LOGGERS
               value: "org.apache.zookeeper=INFO,org.I0Itec.zkclient=INFO,org.reflections=INFO"
             - name: CONNECT_CONSUMER_OFFSETS_TOPIC_REPLICATION_FACTOR
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: CONNECT_CONSUMER_OFFSETS_TOPIC_NUM_PARTITIONS
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: CONNECT_INTERNAL_REPLICATION_FACTOR
-              value: "{{ .Values.dataPlane.components.kafka.connect.replicas }}"
+              value: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect }}{{ .Values.dataPlane.components.kafka.connect.replicas | default 1 }}{{ else }}1{{ end }}"
             - name: KAFKA_NUM_PARTITIONS
               value: "3"
             - name: CONNECT_PRODUCER_DEFAULT_PARTITIONS
               value: "3"
             - name: CONNECT_CONSUMER_DEFAULT_PARTITIONS
               value: "3"
+          {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect .Values.dataPlane.components.kafka.connect.image }}
+          {{- else }}
           imagePullPolicy: Always
+          {{- end }}
           resources:
+            {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect .Values.dataPlane.components.kafka.connect.resources }}
             {{- toYaml .Values.dataPlane.components.kafka.connect.resources | nindent 12 }}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-ui
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: kafka-ui
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kafka-ui
-  template:
-    metadata:
-      labels:
-        app: kafka-ui
-    spec:
-      containers:
-      - name: kafka-ui
-        image: {{ .Values.dataPlane.components.kafka.ui.image | quote }}
-        env:
-        - name: KAFKA_CLUSTERS_0_NAME
-          value: "K8 Kafka Cluster"
-        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-          value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
-        imagePullPolicy: Always
-        resources:
-          {{- toYaml .Values.dataPlane.components.kafka.ui.resources | nindent 10 }}
-        ports:
-        - containerPort: 8080
+            {{- else }}
+            limits:
+              cpu: "1"
+              memory: 4Gi
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -133,8 +156,11 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-timeout": "300"
 spec:
-  backoffLimit: 6
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:
@@ -143,11 +169,14 @@ spec:
     spec:
       containers:
       - name: create-connectors
-        image: {{ .Values.dataPlane.components.connectorsJob.image | quote }}
+        image: {{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.connectorsJob }}{{ (.Values.dataPlane.components.connectorsJob.image | default "curlimages/curl:8.13.0") | quote }}{{ else }}"curlimages/curl:8.13.0"{{ end }}
         command: ["/bin/sh", "-c"]
         args:
           - |
-            echo "Creating ClickHouse sink connector..."
+            echo "=== Kafka Connectors Job ==="
+            echo "This job will check if connectors exist and create missing ones."
+            echo "If connectors already exist, they will be skipped."
+            echo ""
             ls -la /scripts
             /scripts/create-clickhouse-sink.sh {{ .Release.Namespace }}
         env:
@@ -180,7 +209,16 @@ spec:
         - name: connector-scripts
           mountPath: /scripts
         resources:
+          {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.connectorsJob .Values.dataPlane.components.connectorsJob.resources }}
           {{- toYaml .Values.dataPlane.components.connectorsJob.resources | nindent 10 }}
+          {{- else }}
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          {{- end }}
       volumes:
       - name: connector-scripts
         configMap:

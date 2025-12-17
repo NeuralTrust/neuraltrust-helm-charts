@@ -1,0 +1,46 @@
+# ClickHouse configuration with proper prefix for Helm dependencies
+# This file should be used with: -f ./neuraltrust/values-clickhouse-prefixed.yaml
+
+global:
+  security:
+    allowInsecureImages: true
+
+clickhouse:
+  # Override the full name to remove the release name prefix
+  # This ensures services are named "clickhouse" instead of "data-plane-clickhouse"
+  fullnameOverride: "clickhouse"
+  
+  auth:
+    username: "neuraltrust"
+    # password should be set via --set (sensitive data)
+  
+  shards: 1
+  replicaCount: 1
+  
+  zookeeper:
+    enabled: false
+  
+  persistence:
+    size: "100Gi"
+  
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2"
+    limits:
+      memory: "8Gi"
+      cpu: "4"
+  
+  logLevel: "fatal"
+  
+  # Security settings for OpenShift
+  securityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+  
+  # OpenShift specific settings
+  openshift:
+    enabled: false  # Set to true for OpenShift
+

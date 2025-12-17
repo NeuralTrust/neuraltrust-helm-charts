@@ -57,7 +57,22 @@ metadata:
 spec:
   host: {{ .Values.controlPlane.components.scheduler.host | quote }}
   tls:
-    termination: edge
+    termination: {{ .Values.controlPlane.components.scheduler.ingress.tls.termination | default "edge" }}
+    {{- if .Values.controlPlane.components.scheduler.ingress.tls.certificate }}
+    certificate: {{ .Values.controlPlane.components.scheduler.ingress.tls.certificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.scheduler.ingress.tls.key }}
+    key: {{ .Values.controlPlane.components.scheduler.ingress.tls.key | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.scheduler.ingress.tls.caCertificate }}
+    caCertificate: {{ .Values.controlPlane.components.scheduler.ingress.tls.caCertificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.scheduler.ingress.tls.destinationCACertificate }}
+    destinationCACertificate: {{ .Values.controlPlane.components.scheduler.ingress.tls.destinationCACertificate | quote }}
+    {{- end }}
+    {{- if .Values.controlPlane.components.scheduler.ingress.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ .Values.controlPlane.components.scheduler.ingress.tls.insecureEdgeTerminationPolicy }}
+    {{- end }}
   to:
     kind: Service
     name: "{{ .Release.Name }}-scheduler-service"

@@ -261,8 +261,48 @@ install_control_plane() {
     
     if [ "$INSTALL_POSTGRESQL" = true ]; then
         POSTGRES_HOST_FINAL="${RELEASE_NAME}-postgresql.$NAMESPACE.svc.cluster.local"
+        # PostgreSQL will be installed as part of the Helm release, no need to check before
+        log_info "PostgreSQL will be installed as part of the control-plane release"
     elif [ -n "$POSTGRES_HOST" ]; then
         POSTGRES_HOST_FINAL="$POSTGRES_HOST"
+        # Verify external PostgreSQL is accessible
+        log_info "Verifying PostgreSQL connection at $POSTGRES_HOST_FINAL..."
+        POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+        
+        # If it's a Kubernetes service (contains .svc.), verify using a temporary pod
+        if echo "$POSTGRES_HOST_FINAL" | grep -q "\.svc\."; then
+            log_info "PostgreSQL appears to be a Kubernetes service, verifying with temporary pod..."
+            MAX_WAIT=60
+            WAIT_COUNT=0
+            while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+                # Use a temporary pod to check connectivity
+                if $KUBECTL_CMD run postgres-check-$$ --image=postgres:17.2-alpine --rm -i --restart=Never -n "$NAMESPACE" -- \
+                    sh -c "nc -z -w 2 $POSTGRES_HOST_FINAL $POSTGRES_PORT" 2>/dev/null; then
+                    log_info "PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+                    break
+                fi
+                WAIT_COUNT=$((WAIT_COUNT + 1))
+                if [ $((WAIT_COUNT % 10)) -eq 0 ]; then
+                    log_info "Waiting for PostgreSQL connection... ($WAIT_COUNT/$MAX_WAIT seconds)"
+                fi
+                sleep 1
+            done
+            if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+                log_warn "Could not verify PostgreSQL connection, but continuing with deployment..."
+            fi
+        else
+            # External host - try nc if available
+            if command -v nc >/dev/null 2>&1; then
+                log_info "Checking external PostgreSQL connection..."
+                if nc -z -w 2 "$POSTGRES_HOST_FINAL" "$POSTGRES_PORT" 2>/dev/null; then
+                    log_info "PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+                else
+                    log_warn "Could not verify PostgreSQL connection from host, but continuing with deployment..."
+                fi
+            else
+                log_info "nc not available, assuming PostgreSQL is accessible at $POSTGRES_HOST_FINAL:$POSTGRES_PORT"
+            fi
+        fi
     fi
     
     # Build optional configuration overrides for non-sensitive data
@@ -279,6 +319,16 @@ install_control_plane() {
         OPTIONAL_OVERRIDES+=(--set "controlPlane.components.postgresql.secrets.host=$POSTGRES_HOST_FINAL")
     fi
 
+    # Always set optional secrets (even if empty) to ensure they exist in the Kubernetes secret
+    # This prevents deployment failures when the deployment references these keys
+    # Use explicit empty string quotes to ensure Helm sets the values even when empty
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendApiKey=\"${RESEND_API_KEY:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendAlertSender=\"${RESEND_ALERT_SENDER:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.resendInviteSender=\"${RESEND_INVITE_SENDER:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.trustgateJwtSecret=\"${TRUSTGATE_JWT_SECRET:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.firewallJwtSecret=\"${FIREWALL_JWT_SECRET:-}\"")
+    OPTIONAL_OVERRIDES+=(--set "controlPlane.secrets.modelScannerSecret=\"${MODEL_SCANNER_SECRET:-}\"")
+
     if [ -z "$POSTGRES_PASSWORD" ]; then
         log_error "POSTGRES_PASSWORD is not set. Please set it in the environment variables."
         exit 1
@@ -286,11 +336,19 @@ install_control_plane() {
 
     log_info "Using data plane API URL: $DATA_PLANE_API_URL"
     
+    # Set preserveExistingSecrets (default: false)
+    PRESERVE_SECRETS="${PRESERVE_EXISTING_SECRETS:-false}"
+    if [ "$PRESERVE_SECRETS" != "true" ] && [ "$PRESERVE_SECRETS" != "false" ]; then
+        log_warn "Invalid value for PRESERVE_EXISTING_SECRETS: $PRESERVE_SECRETS. Using default: false"
+        PRESERVE_SECRETS="false"
+    fi
+    
     helm upgrade --install $RELEASE_NAME "./neuraltrust/control-plane" \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
         --timeout 15m \
         --set global.openshift="$USE_OPENSHIFT" \
+        --set controlPlane.preserveExistingSecrets="$PRESERVE_SECRETS" \
         --set controlPlane.secrets.controlPlaneJWTSecret="$CONTROL_PLANE_JWT_SECRET" \
         --set controlPlane.secrets.openaiApiKey="$OPENAI_API_KEY" \
         --set controlPlane.components.postgresql.installInCluster="$INSTALL_POSTGRESQL" \
@@ -298,12 +356,12 @@ install_control_plane() {
         --set controlPlane.components.app.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.scheduler.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
         --set controlPlane.components.api.config.dataPlaneApiUrl="$DATA_PLANE_API_URL" \
-        --set controlPlane.secrets.resendApiKey="${RESEND_API_KEY:-}" \
         --set controlPlane.components.scheduler.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         --set controlPlane.components.app.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
         "${OPTIONAL_OVERRIDES[@]}" \
-        --wait
+        --wait-for-jobs \
+        --timeout 10m
 
 
     log_info "NeuralTrust Control Plane infrastructure installed successfully!"

@@ -352,25 +352,86 @@ install_data_plane() {
     # Create required secrets
     create_data_plane_secrets
 
-    # Install databases
-    install_databases
+    # Generate ClickHouse password
+    CLICKHOUSE_PASSWORD=$(openssl rand -base64 32)
+    log_info "ClickHouse password generated. It will be stored in the ClickHouse secret."
+    log_info "Password: $CLICKHOUSE_PASSWORD"
+    log_info "Please save this password in a secure location"
 
-    # Install messaging system
-    install_messaging
+    # Install data plane components (includes ClickHouse and Kafka as dependencies)
+    log_info "Installing data plane components (including ClickHouse and Kafka)..."
 
-    # Install data plane components for Kubernetes
-    log_info "Installing data plane components..."
+    # Build Helm dependencies first
+    log_info "Building Helm chart dependencies..."
+    cd "./neuraltrust/data-plane"
+    helm dependency build
+    cd ../..
 
     PULL_SECRET=""
     if [ "$AVOID_NEURALTRUST_PRIVATE_REGISTRY" = false ]; then
         PULL_SECRET="gcr-secret"
     fi
 
+    # Set preserveExistingSecrets (default: false)
+    PRESERVE_SECRETS="${PRESERVE_EXISTING_SECRETS:-false}"
+    if [ "$PRESERVE_SECRETS" != "true" ] && [ "$PRESERVE_SECRETS" != "false" ]; then
+        log_warn "Invalid value for PRESERVE_EXISTING_SECRETS: $PRESERVE_SECRETS. Using default: false"
+        PRESERVE_SECRETS="false"
+    fi
+
+    # Create temporary values files with proper dependency prefixes
+    TEMP_CLICKHOUSE_VALUES=$(mktemp)
+    TEMP_KAFKA_VALUES=$(mktemp)
+    
+    # Transform values-clickhouse.yaml to have clickhouse prefix
+    # Use yq if available, otherwise use sed
+    if command -v yq >/dev/null 2>&1; then
+        yq eval '. as $item ireduce ({}; .clickhouse = $item)' ./neuraltrust/values-clickhouse.yaml > "$TEMP_CLICKHOUSE_VALUES"
+        yq eval -i ".clickhouse.auth.password = \"$CLICKHOUSE_PASSWORD\"" "$TEMP_CLICKHOUSE_VALUES"
+        yq eval -i ".global.security.allowInsecureImages = true" "$TEMP_CLICKHOUSE_VALUES"
+    else
+        # Fallback: create YAML with clickhouse prefix manually
+        {
+            echo "global:"
+            echo "  security:"
+            echo "    allowInsecureImages: true"
+            echo "clickhouse:"
+            sed 's/^/  /' ./neuraltrust/values-clickhouse.yaml
+            echo "  auth:"
+            echo "    password: $CLICKHOUSE_PASSWORD"
+        } > "$TEMP_CLICKHOUSE_VALUES"
+    fi
+    
+    # Transform values-kafka.yaml to have kafka prefix
+    if command -v yq >/dev/null 2>&1; then
+        yq eval '. as $item ireduce ({}; .kafka = $item)' ./neuraltrust/values-kafka.yaml > "$TEMP_KAFKA_VALUES"
+        yq eval -i ".global.security.allowInsecureImages = true" "$TEMP_KAFKA_VALUES"
+    else
+        # Fallback: create YAML with kafka prefix manually
+        {
+            echo "global:"
+            echo "  security:"
+            echo "    allowInsecureImages: true"
+            echo "kafka:"
+            sed 's/^/  /' ./neuraltrust/values-kafka.yaml
+        } > "$TEMP_KAFKA_VALUES"
+    fi
+    
+    # Cleanup function
+    cleanup_temp_files() {
+        rm -f "$TEMP_CLICKHOUSE_VALUES" "$TEMP_KAFKA_VALUES"
+    }
+    trap cleanup_temp_files EXIT
+
     helm upgrade --install data-plane "./neuraltrust/data-plane" \
         --namespace "$NAMESPACE" \
         -f "$VALUES_FILE" \
-        --timeout 15m \
+        -f "$TEMP_CLICKHOUSE_VALUES" \
+        -f "$TEMP_KAFKA_VALUES" \
+        --timeout 30m \
         --set global.openshift="$USE_OPENSHIFT" \
+        --set global.security.allowInsecureImages=true \
+        --set dataPlane.preserveExistingSecrets="$PRESERVE_SECRETS" \
         --set dataPlane.imagePullSecrets="$PULL_SECRET" \
         --set dataPlane.secrets.huggingFaceToken="$HUGGINGFACE_TOKEN" \
         --set dataPlane.secrets.dataPlaneJWTSecret="$DATA_PLANE_JWT_SECRET" \
@@ -382,7 +443,9 @@ install_data_plane() {
         --set dataPlane.components.clickhouse.backup.gcs.accessKey="${GCS_ACCESS_KEY:-}" \
         --set dataPlane.components.clickhouse.backup.gcs.secretKey="${GCS_SECRET_KEY:-}" \
         --set dataPlane.components.api.ingress.enabled="$([ "$SKIP_INGRESS" = true ] && echo false || echo true)" \
-        --wait
+        --set clickhouse.auth.password="$CLICKHOUSE_PASSWORD" \
+        --wait-for-jobs \
+        --timeout 30m
 
     log_info "NeuralTrust Data Plane infrastructure installed successfully!"
 }

@@ -5,39 +5,39 @@ metadata:
   labels:
     app: api
 spec:
-  type: {{ .Values.dataPlane.components.api.service.type }}
+  type: {{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.service }}{{ .Values.dataPlane.components.api.service.type | default "LoadBalancer" }}{{ else }}LoadBalancer{{ end }}
   ports:
     - port: 80
       targetPort: 8000
       name: http
   selector:
     app: api
-{{- if and (not .Values.global.openshift) .Values.dataPlane.components.api.ingress.enabled }}
+{{- if and (not .Values.global.openshift) .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Release.Name }}-api-ingress"
-  {{- if .Values.dataPlane.components.api.ingress.annotations }}
+  {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.annotations }}
   annotations:
     {{- toYaml .Values.dataPlane.components.api.ingress.annotations | nindent 4 }}
   {{- end }}
 spec:
-  {{- if .Values.dataPlane.components.api.ingress.className }}
+  {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.className }}
   ingressClassName: {{ .Values.dataPlane.components.api.ingress.className }}
   {{- end }}
-  {{- if .Values.dataPlane.components.api.ingress.tls.enabled }}
+  {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.tls .Values.dataPlane.components.api.ingress.tls.enabled }}
   tls:
     - hosts:
         - "{{ .Values.dataPlane.components.api.host }}"
-      {{- if .Values.dataPlane.components.api.ingress.tls.secretName }}
+      {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.tls .Values.dataPlane.components.api.ingress.tls.secretName }}
       secretName: {{ .Values.dataPlane.components.api.ingress.tls.secretName }}
       {{- else }}
       secretName: "{{ .Release.Name }}-api-tls"
       {{- end }}
   {{- end }}
   rules:
-    - host: "{{ .Values.dataPlane.components.api.host }}"
+    - host: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api }}{{ .Values.dataPlane.components.api.host }}{{ else }}data-plane-api.neuraltrust.ai{{ end }}"
       http:
         paths:
           - path: /
@@ -55,9 +55,26 @@ kind: Route
 metadata:
   name: "{{ .Release.Name }}-api-route"
 spec:
-  host: "{{ .Values.dataPlane.components.api.host }}"
+  host: "{{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api }}{{ .Values.dataPlane.components.api.host }}{{ else }}data-plane-api.neuraltrust.ai{{ end }}"
+  {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.api .Values.dataPlane.components.api.ingress .Values.dataPlane.components.api.ingress.tls }}
   tls:
-    termination: edge
+    termination: {{ .Values.dataPlane.components.api.ingress.tls.termination | default "edge" }}
+    {{- if .Values.dataPlane.components.api.ingress.tls.certificate }}
+    certificate: {{ .Values.dataPlane.components.api.ingress.tls.certificate | quote }}
+    {{- end }}
+    {{- if .Values.dataPlane.components.api.ingress.tls.key }}
+    key: {{ .Values.dataPlane.components.api.ingress.tls.key | quote }}
+    {{- end }}
+    {{- if .Values.dataPlane.components.api.ingress.tls.caCertificate }}
+    caCertificate: {{ .Values.dataPlane.components.api.ingress.tls.caCertificate | quote }}
+    {{- end }}
+    {{- if .Values.dataPlane.components.api.ingress.tls.destinationCACertificate }}
+    destinationCACertificate: {{ .Values.dataPlane.components.api.ingress.tls.destinationCACertificate | quote }}
+    {{- end }}
+    {{- if .Values.dataPlane.components.api.ingress.tls.insecureEdgeTerminationPolicy }}
+    insecureEdgeTerminationPolicy: {{ .Values.dataPlane.components.api.ingress.tls.insecureEdgeTerminationPolicy }}
+    {{- end }}
+  {{- end }}
   to:
     kind: Service
     name: "{{ .Release.Name }}-api-service"

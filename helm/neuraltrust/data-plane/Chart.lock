@@ -1,0 +1,9 @@
+dependencies:
+- name: clickhouse
+  repository: file://../../clickhouse
+  version: 8.0.10
+- name: kafka
+  repository: file://../../kafka
+  version: 31.0.0
+digest: sha256:0d5565664361f987db7b20c14ddcf4cf6569910c8cc137a19d09ad353c0a225f
+generated: "2025-12-09T17:51:52.22221+01:00"

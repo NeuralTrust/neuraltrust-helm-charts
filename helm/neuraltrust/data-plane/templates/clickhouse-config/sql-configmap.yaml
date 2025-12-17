@@ -1,10 +1,12 @@
+{{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.clickhouse .Values.dataPlane.components.clickhouse.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.dataPlane.components.clickhouse.configmap.name | default "clickhouse-init-job" }}
+  name: {{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.clickhouse .Values.dataPlane.components.clickhouse.configmap }}{{ .Values.dataPlane.components.clickhouse.configmap.name | default "clickhouse-init-job" }}{{ else }}clickhouse-init-job{{ end }}
   namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-weight": "-5"
 data:
-  init-db.sql: {{ .Files.Get "files/clickhouse/init-db.sql" | quote }} 
+  init-db.sql: {{ .Files.Get "files/clickhouse/init-db.sql" | quote }}
+{{- end }} 

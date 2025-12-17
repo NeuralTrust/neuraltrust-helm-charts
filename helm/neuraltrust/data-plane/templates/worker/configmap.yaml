@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-secrets
 data:
-  NEURALTRUST_CLASSIFIER_MODEL: {{ .Values.dataPlane.classifierModel }} 
+  NEURALTRUST_CLASSIFIER_MODEL: {{ (.Values.dataPlane.components.api.classifierModel | default "gpt") | quote }} 

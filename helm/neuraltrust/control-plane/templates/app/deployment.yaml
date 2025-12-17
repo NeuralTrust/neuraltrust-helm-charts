@@ -207,12 +207,30 @@ spec:
               name: {{ .Release.Name }}-secrets
               key: TRUSTGATE_JWT_SECRET
         - name: FIREWALL_API_URL
+          {{- if .Values.controlPlane.components.app.config.firewallApiUrl }}
           value: "{{ .Values.controlPlane.components.app.config.firewallApiUrl }}"
+          {{- else }}
+          # Use data plane API URL as default for firewall
+          {{- if .Values.controlPlane.components.app.config.dataPlaneApiUrl }}
+          value: "{{ .Values.controlPlane.components.app.config.dataPlaneApiUrl }}"
+          {{- else }}
+          value: "http://{{ .Release.Name }}-data-plane-api-service.{{ .Release.Namespace }}.svc.cluster.local"
+          {{- end }}
+          {{- end }}
         - name: FIREWALL_JWT_SECRET
+          {{- if and .Values.controlPlane.secrets.firewallJwtSecret (ne .Values.controlPlane.secrets.firewallJwtSecret "") }}
+          # Use firewall JWT secret from control-plane secrets if present
           valueFrom:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: FIREWALL_JWT_SECRET
+          {{- else }}
+          # Use data plane JWT secret as fallback if firewall JWT secret is not present
+          valueFrom:
+            secretKeyRef:
+              name: data-plane-jwt-secret
+              key: DATA_PLANE_JWT_SECRET
+          {{- end }}
         - name: MODEL_SCANNER_API_URL
           value: "{{ .Values.controlPlane.components.app.config.modelScannerApiUrl }}"
         - name: MODEL_SCANNER_SECRET
@@ -220,5 +238,9 @@ spec:
             secretKeyRef:
               name: {{ .Release.Name }}-secrets
               key: MODEL_SCANNER_SECRET
+        - name: KAFKA_HOST
+          value: "{{ .Values.controlPlane.components.app.config.kafkaHost | default "kafka" }}"
+        - name: KAFKA_PORT
+          value: "{{ .Values.controlPlane.components.app.config.kafkaPort | default "9092" }}"
         resources:
           {{- toYaml .Values.controlPlane.components.app.resources | nindent 10 }}

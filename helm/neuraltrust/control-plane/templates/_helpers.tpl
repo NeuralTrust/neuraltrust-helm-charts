@@ -1,49 +1,13 @@
 {{/*
-Common labels
-*/}}
-{{- define "neuraltrust-data-plane.labels" -}}
-helm.sh/chart: {{ include "neuraltrust-data-plane.chart" . }}
-{{ include "neuraltrust-data-plane.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-{{/*
-Selector labels
-*/}}
-{{- define "neuraltrust-data-plane.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "neuraltrust-data-plane.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
-{{- define "neuraltrust-data-plane.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-If release name contains chart name it will be used as a full name.
-*/}}
-{{- define "neuraltrust-data-plane.name" -}}
-{{- .Chart.Name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
 Helper to get secret value - supports both direct values and secret references
-Usage: {{ include "data-plane.getSecretValue" (dict "value" .Values.dataPlane.secrets.openaiApiKey "secretName" "my-secret" "secretKey" "OPENAI_API_KEY" "context" $) }}
+Usage: {{ include "control-plane.getSecretValue" (dict "value" .Values.controlPlane.secrets.openaiApiKey "secretName" "my-secret" "secretKey" "OPENAI_API_KEY" "context" $) }}
 */}}
-{{- define "data-plane.getSecretValue" -}}
+{{- define "control-plane.getSecretValue" -}}
 {{- $value := .value }}
 {{- $secretName := .secretName }}
 {{- $secretKey := .secretKey }}
 {{- $context := .context }}
-{{- $preserveSecrets := $context.Values.dataPlane.preserveExistingSecrets }}
+{{- $preserveSecrets := $context.Values.controlPlane.preserveExistingSecrets }}
 
 {{- if kindIs "map" $value }}
   {{- /* Value is a secret reference object */}}
@@ -77,3 +41,4 @@ Usage: {{ include "data-plane.getSecretValue" (dict "value" .Values.dataPlane.se
   {{- end }}
 {{- end }}
 {{- end }}
+
