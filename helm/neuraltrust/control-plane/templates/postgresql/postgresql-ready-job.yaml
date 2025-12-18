@@ -2,9 +2,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Release.Name }}-postgresql-ready-check
+  name: postgresql-ready-check
   labels:
-    app: {{ .Release.Name }}-postgresql
+    app: postgresql
     component: readiness-check
   annotations:
     "helm.sh/hook": post-install,post-upgrade
@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-postgresql
+        app: postgresql
         component: readiness-check
     spec:
       restartPolicy: OnFailure
@@ -29,7 +29,7 @@ spec:
         - -c
         - |
           set -e
-          POSTGRES_HOST="{{ .Release.Name }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local"
+          POSTGRES_HOST="postgresql.{{ .Release.Namespace }}.svc.cluster.local"
           POSTGRES_PORT="5432"
           MAX_ATTEMPTS=120
           ATTEMPT=0
@@ -67,7 +67,7 @@ spec:
           exit 1
         env:
         - name: POSTGRES_HOST
-          value: "{{ .Release.Name }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local"
+          value: "postgresql.{{ .Release.Namespace }}.svc.cluster.local"
         - name: POSTGRES_PORT
           value: "5432"
       {{- if .Values.controlPlane.imagePullSecrets }}

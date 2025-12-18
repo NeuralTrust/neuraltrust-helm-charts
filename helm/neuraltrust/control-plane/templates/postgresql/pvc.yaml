@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ .Release.Name }}-postgresql-pvc
+  name: postgresql-pvc
   labels:
-    app: {{ .Release.Name }}-postgresql
+    app: postgresql
   {{- if (.Values.controlPlane.components.postgresql.persistence.preserveOnDelete | default true) }}
   annotations:
     helm.sh/resource-policy: keep

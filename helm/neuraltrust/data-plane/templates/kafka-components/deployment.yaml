@@ -89,7 +89,7 @@ spec:
             - name: CONNECT_ERRORS_RETRY_TIMEOUT
               value: "60"
             - name: CONNECT_BOOTSTRAP_SERVERS
-              value: "kafka-broker-0.kafka-broker-headless.{{ .Release.Namespace }}.svc.cluster.local:9094"
+              value: {{ if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.kafka .Values.dataPlane.components.kafka.connect .Values.dataPlane.components.kafka.connect.bootstrapServers (ne .Values.dataPlane.components.kafka.connect.bootstrapServers "") }}{{ .Values.dataPlane.components.kafka.connect.bootstrapServers | quote }}{{ else if and .Values.kafka .Values.kafka.fullnameOverride }}{{ printf "%s-broker-0.%s-broker-headless.%s.svc.cluster.local:9094" .Values.kafka.fullnameOverride .Values.kafka.fullnameOverride .Release.Namespace | quote }}{{ else }}{{ printf "%s-kafka-broker-0.%s-kafka-broker-headless.%s.svc.cluster.local:9094" .Release.Name .Release.Name .Release.Namespace | quote }}{{ end }}
             - name: CONNECT_GROUP_ID
               value: "connect-cluster"
             - name: CONNECT_CONFIG_STORAGE_TOPIC

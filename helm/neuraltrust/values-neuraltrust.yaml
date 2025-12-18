@@ -3,6 +3,15 @@ global:
   security:
     allowInsecureImages: true # Allow Bitnami charts to use their container images
 
+# Helm dependency configurations (for clickhouse and kafka subcharts)
+# These override the full name to remove the release name prefix
+# This ensures services are named "clickhouse" and "kafka" instead of "data-plane-clickhouse" and "data-plane-kafka"
+clickhouse:
+  fullnameOverride: "clickhouse"
+
+kafka:
+  fullnameOverride: "kafka"
+
 dataPlane:
   enabled: true
   preserveExistingSecrets: false  # If true, existing secrets in the cluster will not be replaced during upgrades
@@ -68,6 +77,13 @@ dataPlane:
       enabled: true
       connect:
         replicas: 1
+        # Bootstrap servers for Kafka Connect to connect to Kafka broker
+        # Leave empty to auto-detect based on kafka.fullnameOverride or release name
+        # Examples:
+        #   - With fullnameOverride="kafka": "kafka-broker-0.kafka-broker-headless.neuraltrust.svc.cluster.local:9094"
+        #   - Without fullnameOverride (release="data-plane"): "data-plane-kafka-broker-0.data-plane-kafka-broker-headless.neuraltrust.svc.cluster.local:9094"
+        #   - Custom: Set this value explicitly
+        bootstrapServers: ""  # Auto-detected if empty
         image:
           repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/kafka-connect
           tag: v0.0.1

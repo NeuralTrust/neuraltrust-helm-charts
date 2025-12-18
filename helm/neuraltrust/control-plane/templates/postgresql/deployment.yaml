@@ -2,18 +2,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-postgresql
+  name: postgresql
   labels:
-    app: {{ .Release.Name }}-postgresql
+    app: postgresql
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ .Release.Name }}-postgresql
+      app: postgresql
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-postgresql
+        app: postgresql
     spec:
       {{- if not .Values.global.openshift }}
       securityContext:
@@ -94,7 +94,7 @@ spec:
       - name: postgresql-data
         {{- if .Values.controlPlane.components.postgresql.persistence.enabled }}
         persistentVolumeClaim:
-          claimName: {{ .Release.Name }}-postgresql-pvc
+          claimName: postgresql-pvc
         {{- else }}
         emptyDir: {}
         {{- end }}
