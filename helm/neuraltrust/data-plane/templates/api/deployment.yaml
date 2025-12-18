@@ -73,6 +73,15 @@ spec:
             
             # Grant permissions
             echo "Granting permissions to user ${CLICKHOUSE_USER}..."
+            # Grant CREATE DATABASE explicitly (required for database creation)
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT CREATE DATABASE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "CREATE DATABASE permission may already be granted, continuing..."
+            # Grant all other permissions
             clickhouse-client \
               --host="${CLICKHOUSE_HOST}" \
               --port="${CLICKHOUSE_NATIVE_PORT}" \
