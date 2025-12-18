@@ -16,9 +16,10 @@ spec:
         app: worker
         plane: data
     spec:
-      {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.worker .Values.dataPlane.components.worker.image .Values.dataPlane.components.worker.image.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml .Values.dataPlane.components.worker.image.imagePullSecrets | nindent 8 }}
+      {{- if .Values.dataPlane.imagePullSecrets }}
+      {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.imagePullSecrets) | nindent 6 }}
+      {{- else if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.worker .Values.dataPlane.components.worker.image .Values.dataPlane.components.worker.image.imagePullSecrets }}
+      {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.components.worker.image.imagePullSecrets) | nindent 6 }}
       {{- end }}
       containers:
       - name: worker

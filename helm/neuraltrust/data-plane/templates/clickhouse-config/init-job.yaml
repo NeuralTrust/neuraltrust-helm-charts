@@ -26,6 +26,9 @@ spec:
         app.kubernetes.io/name: {{ .Release.Name }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- if .Values.dataPlane.components.clickhouse.initJob.imagePullSecrets }}
+      {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.components.clickhouse.initJob.imagePullSecrets) | nindent 6 }}
+      {{- end }}
       restartPolicy: OnFailure
       containers:
         - name: clickhouse-init

@@ -16,9 +16,8 @@ spec:
         app: api
         plane: data
     spec:
-      {{- if (eq .Values.dataPlane.imagePullSecrets "gcr-secret") }}
-      imagePullSecrets:
-        - name: gcr-secret
+      {{- if .Values.dataPlane.imagePullSecrets }}
+      {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.imagePullSecrets) | nindent 6 }}
       {{- end }}
       {{- if and .Values.dataPlane .Values.dataPlane.components .Values.dataPlane.components.clickhouse .Values.dataPlane.components.clickhouse.enabled }}
       initContainers:

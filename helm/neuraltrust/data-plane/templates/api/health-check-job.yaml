@@ -65,13 +65,8 @@ spec:
           echo "Remaining pods will scale up in background."
           # Exit with success to allow deployment to continue - don't block on health check
           exit 0
-      {{- if .Values.dataPlane.imagePullSecrets }}
-      imagePullSecrets:
-        {{- if kindIs "string" .Values.dataPlane.imagePullSecrets }}
-        - name: {{ .Values.dataPlane.imagePullSecrets }}
-        {{- else if kindIs "slice" .Values.dataPlane.imagePullSecrets }}
-        {{- toYaml .Values.dataPlane.imagePullSecrets | nindent 8 }}
-        {{- end }}
+      {{- if .Values.dataPlane.components.api.healthCheck.imagePullSecrets }}
+      {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.components.api.healthCheck.imagePullSecrets) | nindent 6 }}
       {{- end }}
 {{- end }}
 

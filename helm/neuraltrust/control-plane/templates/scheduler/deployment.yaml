@@ -16,9 +16,8 @@ spec:
         app: {{ .Release.Name }}-scheduler
         plane: control
     spec:
-      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
-      imagePullSecrets:
-        - name: gcr-secret
+      {{- if .Values.controlPlane.imagePullSecrets }}
+      {{- include "control-plane.imagePullSecrets" (dict "value" .Values.controlPlane.imagePullSecrets) | nindent 6 }}
       {{- end }}
       initContainers:
       - name: wait-for-postgresql

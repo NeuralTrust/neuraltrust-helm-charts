@@ -10,6 +10,9 @@ spec:
     spec:
       template:
         spec:
+          {{- if .Values.dataPlane.imagePullSecrets }}
+          {{- include "data-plane.imagePullSecrets" (dict "value" .Values.dataPlane.imagePullSecrets) | nindent 10 }}
+          {{- end }}
           containers:
             - name: backup
               image: {{ .Values.dataPlane.components.clickhouse.backup.image.repository }}:{{ .Values.dataPlane.components.clickhouse.backup.image.tag }}

@@ -22,8 +22,9 @@ spec:
         runAsGroup: 999
         runAsNonRoot: true
       {{- end }}
-      imagePullSecrets:
-        {{- toYaml .Values.controlPlane.components.postgresql.imagePullSecrets | nindent 10 }}
+      {{- if .Values.controlPlane.components.postgresql.imagePullSecrets }}
+      {{- include "control-plane.imagePullSecrets" (dict "value" .Values.controlPlane.components.postgresql.imagePullSecrets) | nindent 6 }}
+      {{- end }}
       containers:
       - name: postgresql
         image: "{{ .Values.controlPlane.components.postgresql.image.repository }}:{{ .Values.controlPlane.components.postgresql.image.tag }}"

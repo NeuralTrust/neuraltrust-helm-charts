@@ -74,9 +74,8 @@ spec:
           echo "Service is not responding on /health or root path."
           echo "Please check pod logs and service status."
           exit 1
-      {{- if (eq .Values.controlPlane.imagePullSecrets "gcr-secret") }}
-      imagePullSecrets:
-        - name: gcr-secret
+      {{- if .Values.controlPlane.components.api.healthCheck.imagePullSecrets }}
+      {{- include "control-plane.imagePullSecrets" (dict "value" .Values.controlPlane.components.api.healthCheck.imagePullSecrets) | nindent 6 }}
       {{- end }}
 {{- end }}
 

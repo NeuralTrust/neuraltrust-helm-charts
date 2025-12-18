@@ -8,13 +8,32 @@ global:
 # This ensures services are named "clickhouse" and "kafka" instead of "data-plane-clickhouse" and "data-plane-kafka"
 clickhouse:
   fullnameOverride: "clickhouse"
+  # imagePullSecrets for ClickHouse StatefulSet pods
+  # Default: empty (no imagePullSecrets) - can be overridden if needed
+  # Can be: string (single secret name), array of strings, or array of objects with name field
+  # Example: imagePullSecrets: "gcr-secret"
+  # Example: imagePullSecrets: ["gcr-secret", "another-secret"]
+  # Example: imagePullSecrets: [{"name": "gcr-secret"}]
+  imagePullSecrets: []  # Empty by default - no imagePullSecrets for ClickHouse
 
 kafka:
   fullnameOverride: "kafka"
+  # imagePullSecrets for Kafka StatefulSet pods
+  # Default: empty (no imagePullSecrets) - can be overridden if needed
+  # Can be: string (single secret name), array of strings, or array of objects with name field
+  # Example: imagePullSecrets: "gcr-secret"
+  # Example: imagePullSecrets: ["gcr-secret", "another-secret"]
+  # Example: imagePullSecrets: [{"name": "gcr-secret"}]
+  imagePullSecrets: []  # Empty by default - no imagePullSecrets for Kafka
 
 dataPlane:
   enabled: true
   preserveExistingSecrets: false  # If true, existing secrets in the cluster will not be replaced during upgrades
+  # imagePullSecrets for all data-plane pods (deployments, jobs, etc.)
+  # Default: "gcr-secret" if not specified
+  # Can be: string (single secret name), array of strings, or array of objects with name field
+  # Set to empty array [] or null to disable
+  imagePullSecrets: "gcr-secret"  # Default to gcr-secret
   secrets:
     openaiApiKeySecretName: "openai-secrets" # Secret name for OpenAI key
     # You can provide either a direct value (string) or a secret reference (object)
@@ -66,6 +85,10 @@ dataPlane:
         name: "clickhouse-secrets"
       configmap:
         name: "clickhouse-init-job"
+      # imagePullSecrets for clickhouse init job (uses clickhouse image)
+      # Default: empty (no imagePullSecrets) - can be set to "docker-secret" or ["docker-secret"]
+      initJob:
+        imagePullSecrets: []  # Empty by default - clickhouse uses public images
       resources:
         requests:
           memory: 512Mi
@@ -136,6 +159,10 @@ dataPlane:
           enabled: true
           secretName: ""  # Leave empty to auto-generate per-service secrets
       classifierModel: "gpt"
+      # imagePullSecrets for health check job (uses curl image)
+      # Default: empty (no imagePullSecrets) - curl uses public images
+      healthCheck:
+        imagePullSecrets: []  # Empty by default - curl uses public images
       image:
         repository: europe-west1-docker.pkg.dev/neuraltrust-app-prod/nt-docker/data-plane-api
         tag: v1.6.2
@@ -206,11 +233,19 @@ dataPlane:
           cpu: 2000m
     connectorsJob: # New section for the create-connectors job
       image: curlimages/curl:8.13.0 # Default image for create-connectors job
+      # imagePullSecrets for create-connectors job (uses curl image)
+      # Default: empty (no imagePullSecrets) - curl uses public images
+      imagePullSecrets: []  # Empty by default - curl uses public images
 
 
 controlPlane:
   enabled: true
   preserveExistingSecrets: false  # If true, existing secrets in the cluster will not be replaced during upgrades
+  # imagePullSecrets for all control-plane pods (deployments, jobs, etc.)
+  # Default: "gcr-secret" if not specified
+  # Can be: string (single secret name), array of strings, or array of objects with name field
+  # Set to empty array [] or null to disable
+  imagePullSecrets: "gcr-secret"  # Default to gcr-secret
   secrets:
     # You can provide either a direct value (string) or a secret reference (object)
     # Direct value example: controlPlaneJWTSecret: "my-secret-value"
@@ -303,6 +338,10 @@ controlPlane:
         pullPolicy: "Always"
         imagePullSecrets:
           - name: gcr-secret
+      # imagePullSecrets for health check job (uses curl image)
+      # Default: empty (no imagePullSecrets) - curl uses public images
+      healthCheck:
+        imagePullSecrets: []  # Empty by default - curl uses public images
       secrets:
         controlPlaneJWTSecret: ""  # Define this value
       config:
@@ -390,8 +429,9 @@ controlPlane:
         repository: "postgres"
         tag: "17.2-alpine"
         pullPolicy: "IfNotPresent"
-        imagePullSecrets:
-          - name: ""
+      # imagePullSecrets for PostgreSQL deployment and jobs
+      # Default: empty (no imagePullSecrets) - can be set to "docker-secret" or ["docker-secret"]
+      imagePullSecrets: []  # Empty by default - postgres uses public images
       persistence:
         enabled: true
         size: 10Gi

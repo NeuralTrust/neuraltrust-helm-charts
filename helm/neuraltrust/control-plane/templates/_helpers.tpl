@@ -40,5 +40,45 @@ Usage: {{ include "control-plane.getSecretValue" (dict "value" .Values.controlPl
     {{- "" | b64enc | quote }}
   {{- end }}
 {{- end }}
+
+{{/*
+Helper to render imagePullSecrets - supports string, array of strings, or array of objects
+Usage: {{ include "control-plane.imagePullSecrets" (dict "value" .Values.controlPlane.imagePullSecrets) }}
+*/}}
+{{- define "control-plane.imagePullSecrets" -}}
+{{- $value := .value }}
+{{- if $value }}
+{{- if kindIs "string" $value }}
+{{- if ne $value "" }}
+imagePullSecrets:
+  - name: {{ $value }}
+{{- end }}
+{{- else if kindIs "slice" $value }}
+{{- if gt (len $value) 0 }}
+imagePullSecrets:
+{{- range $value }}
+  {{- if kindIs "string" . }}
+  {{- if ne . "" }}
+  - name: {{ . }}
+  {{- end }}
+  {{- else if kindIs "map" . }}
+  {{- if hasKey . "name" }}
+  {{- if ne .name "" }}
+  - name: {{ .name }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- else if kindIs "map" $value }}
+{{- if hasKey $value "name" }}
+{{- if ne $value.name "" }}
+imagePullSecrets:
+  - name: {{ $value.name }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 

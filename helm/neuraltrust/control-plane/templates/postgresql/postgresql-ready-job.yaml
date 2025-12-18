@@ -70,13 +70,8 @@ spec:
           value: "postgresql.{{ .Release.Namespace }}.svc.cluster.local"
         - name: POSTGRES_PORT
           value: "5432"
-      {{- if .Values.controlPlane.imagePullSecrets }}
-      imagePullSecrets:
-        {{- if kindIs "string" .Values.controlPlane.imagePullSecrets }}
-        - name: {{ .Values.controlPlane.imagePullSecrets }}
-        {{- else if kindIs "slice" .Values.controlPlane.imagePullSecrets }}
-        {{- toYaml .Values.controlPlane.imagePullSecrets | nindent 8 }}
-        {{- end }}
+      {{- if .Values.controlPlane.components.postgresql.imagePullSecrets }}
+      {{- include "control-plane.imagePullSecrets" (dict "value" .Values.controlPlane.components.postgresql.imagePullSecrets) | nindent 6 }}
       {{- end }}
 {{- end }}
 
