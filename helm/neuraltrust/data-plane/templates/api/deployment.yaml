@@ -71,9 +71,9 @@ spec:
               --query="CREATE USER IF NOT EXISTS ${CLICKHOUSE_USER} IDENTIFIED WITH sha256_password BY '${CLICKHOUSE_PASSWORD}'" 2>/dev/null || \
               echo "User may already exist, continuing..."
             
-            # Grant permissions
-            echo "Granting permissions to user ${CLICKHOUSE_USER}..."
-            # Grant CREATE DATABASE explicitly (required for database creation)
+            # Grant full access to user
+            echo "Granting full access to user ${CLICKHOUSE_USER}..."
+            # Grant CREATE DATABASE
             clickhouse-client \
               --host="${CLICKHOUSE_HOST}" \
               --port="${CLICKHOUSE_NATIVE_PORT}" \
@@ -81,14 +81,99 @@ spec:
               --password="${CLICKHOUSE_PASSWORD}" \
               --query="GRANT CREATE DATABASE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
               echo "CREATE DATABASE permission may already be granted, continuing..."
-            # Grant all other permissions
+            # Grant DROP DATABASE
             clickhouse-client \
               --host="${CLICKHOUSE_HOST}" \
               --port="${CLICKHOUSE_NATIVE_PORT}" \
               --user=default \
               --password="${CLICKHOUSE_PASSWORD}" \
-              --query="GRANT ALL ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
-              echo "Permissions may already be granted, continuing..."
+              --query="GRANT DROP DATABASE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "DROP DATABASE permission may already be granted, continuing..."
+            # Grant CREATE TABLE
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT CREATE TABLE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "CREATE TABLE permission may already be granted, continuing..."
+            # Grant DROP TABLE
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT DROP TABLE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "DROP TABLE permission may already be granted, continuing..."
+            # Grant ALTER TABLE
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT ALTER TABLE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "ALTER TABLE permission may already be granted, continuing..."
+            # Grant data operation permissions
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT SELECT ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "SELECT permission may already be granted, continuing..."
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT INSERT ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "INSERT permission may already be granted, continuing..."
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT UPDATE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "UPDATE permission may already be granted, continuing..."
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT DELETE ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "DELETE permission may already be granted, continuing..."
+            # Grant CREATE VIEW (for regular views)
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT CREATE VIEW ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "CREATE VIEW permission may already be granted, continuing..."
+            # Grant DROP VIEW (needed for CREATE OR REPLACE VIEW)
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT DROP VIEW ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "DROP VIEW permission may already be granted, continuing..."
+            # Grant CREATE MATERIALIZED VIEW
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT CREATE MATERIALIZED VIEW ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "CREATE MATERIALIZED VIEW permission may already be granted, continuing..."
+            # Grant DROP MATERIALIZED VIEW
+            clickhouse-client \
+              --host="${CLICKHOUSE_HOST}" \
+              --port="${CLICKHOUSE_NATIVE_PORT}" \
+              --user=default \
+              --password="${CLICKHOUSE_PASSWORD}" \
+              --query="GRANT DROP MATERIALIZED VIEW ON *.* TO ${CLICKHOUSE_USER}" 2>/dev/null || \
+              echo "DROP MATERIALIZED VIEW permission may already be granted, continuing..."
             
             # Calculate MD5 hash of the migration file
             MIGRATION_HASH=$(md5sum /init-db/init-db.sql | cut -d' ' -f1)
