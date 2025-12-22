@@ -82,6 +82,72 @@ spec:
               secretKeyRef:
                 name: clickhouse
                 key: admin-password
+          - name: NEURALTRUST_CLASSIFIER_MODEL
+            value: "{{ .Values.global.classifierModel }}"
+          # Kubernetes Jobs Configuration
+          - name: K8S_JOBS_ENABLED
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.enabled }}"
+          - name: K8S_JOBS_NAMESPACE
+            value: "{{ default .Release.Namespace .Values.dataPlane.components.api.k8sJobs.namespace }}"
+          - name: K8S_JOB_IMAGE
+            value: "{{ default (printf "%s:%s" .Values.dataPlane.components.api.image.repository .Values.dataPlane.components.api.image.tag) .Values.dataPlane.components.api.k8sJobs.image }}"
+          - name: K8S_JOB_IMAGE_PULL_POLICY
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.imagePullPolicy }}"
+          {{- if .Values.dataPlane.components.api.k8sJobs.serviceAccount }}
+          - name: K8S_JOB_SERVICE_ACCOUNT
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.serviceAccount }}"
+          {{- end }}
+          - name: K8S_USE_LOCAL_CONFIG
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.useLocalConfig }}"
+          - name: K8S_JOB_TTL_SECONDS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.ttlSeconds }}"
+          # K8s Job Resource Limits
+          - name: K8S_JOB_CPU_REQUEST
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.resources.requests.cpu }}"
+          - name: K8S_JOB_CPU_LIMIT
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.resources.limits.cpu }}"
+          - name: K8S_JOB_MEMORY_REQUEST
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.resources.requests.memory }}"
+          - name: K8S_JOB_MEMORY_LIMIT
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.resources.limits.memory }}"
+          - name: K8S_JOB_CLICKHOUSE_POOL_SIZE
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.clickhousePoolSize }}"
+          # K8s API Reliability Settings
+          - name: K8S_API_MAX_RETRIES
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.apiMaxRetries }}"
+          - name: K8S_API_RETRY_BASE_DELAY
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.apiRetryBaseDelay }}"
+          - name: K8S_API_RETRY_MAX_DELAY
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.apiRetryMaxDelay }}"
+          - name: K8S_JOB_CREATION_DELAY_MS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.creationDelayMs }}"
+          # K8s Job Concurrency Control
+          - name: K8S_MAX_CONCURRENT_JOBS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.maxConcurrentJobs }}"
+          - name: K8S_JOB_WAIT_TIMEOUT_SECONDS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.waitTimeoutSeconds }}"
+          - name: K8S_JOB_WAIT_POLL_INTERVAL_SECONDS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.waitPollIntervalSeconds }}"
+          - name: K8S_JOB_STARTUP_JITTER_SECONDS
+            value: "{{ .Values.dataPlane.components.api.k8sJobs.startupJitterSeconds }}"
+          # Circuit Breaker Settings
+          - name: CIRCUIT_BREAKER_FAILURE_THRESHOLD
+            value: "{{ .Values.dataPlane.components.api.circuitBreaker.failureThreshold }}"
+          - name: CIRCUIT_BREAKER_SUCCESS_THRESHOLD
+            value: "{{ .Values.dataPlane.components.api.circuitBreaker.successThreshold }}"
+          - name: CIRCUIT_BREAKER_TIMEOUT_SECONDS
+            value: "{{ .Values.dataPlane.components.api.circuitBreaker.timeoutSeconds }}"
+          - name: CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS
+            value: "{{ .Values.dataPlane.components.api.circuitBreaker.halfOpenMaxCalls }}"
+          # ClickHouse Query Control
+          - name: CLICKHOUSE_POOL_SIZE
+            value: "{{ .Values.dataPlane.components.api.clickhouse.poolSize }}"
+          - name: CLICKHOUSE_MAX_CONCURRENT_QUERIES
+            value: "{{ .Values.dataPlane.components.api.clickhouse.maxConcurrentQueries }}"
+          - name: CLICKHOUSE_INSERT_BATCH_SIZE
+            value: "{{ .Values.dataPlane.components.api.clickhouse.insertBatchSize }}"
+          - name: CLICKHOUSE_INSERT_JITTER_SECONDS
+            value: "{{ .Values.dataPlane.components.api.clickhouse.insertJitterSeconds }}"
         volumeMounts:
           - name: huggingface-cache
             mountPath: "/root/.cache/huggingface"
