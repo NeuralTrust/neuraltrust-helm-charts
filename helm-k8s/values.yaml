@@ -167,6 +167,46 @@ dataPlane:
         limits:
           cpu: 400m
           memory: 1Gi
+      # Kubernetes Jobs Configuration
+      k8sJobs:
+        enabled: true
+        namespace: ""  # If empty, uses the release namespace
+        image: ""  # If empty, uses the API image
+        imagePullPolicy: "Always"
+        serviceAccount: ""  # If empty, uses default
+        useLocalConfig: false
+        ttlSeconds: 3600
+        # Job Resource Limits
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        clickhousePoolSize: 8
+        # API Reliability Settings
+        apiMaxRetries: 3
+        apiRetryBaseDelay: 1.0
+        apiRetryMaxDelay: 10.0
+        creationDelayMs: 100
+        # Concurrency Control
+        maxConcurrentJobs: 10
+        waitTimeoutSeconds: 1800
+        waitPollIntervalSeconds: 2.0
+        startupJitterSeconds: 5.0
+      # Circuit Breaker Settings
+      circuitBreaker:
+        failureThreshold: 5
+        successThreshold: 2
+        timeoutSeconds: 30.0
+        halfOpenMaxCalls: 3
+      # ClickHouse Query Control
+      clickhouse:
+        poolSize: 32
+        maxConcurrentQueries: 30
+        insertBatchSize: 20
+        insertJitterSeconds: 0.5
     kafka:
       enabled: true
       connect:
